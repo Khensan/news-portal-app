@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>News Portal - Account Login</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background-color: #f4f7f6; color: #333; margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; }
+        .login-container { background: white; padding: 40px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.08); width: 100%; max-width: 400px; border-top: 5px solid #2c3e50; }
+        .login-header { text-align: center; margin-bottom: 30px; }
+        .login-header h2 { margin: 0; color: #2c3e50; font-size: 26px; }
+        .login-header p { color: #7f8c8d; font-size: 14px; margin-top: 5px; }
+        .form-group { margin-bottom: 20px; }
+        .form-group label { display: block; margin-bottom: 8px; font-weight: bold; font-size: 14px; color: #2c3e50; }
+        .form-group input { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; font-size: 15px; }
+        .form-group input:focus { border-color: #3498db; outline: none; }
+        .btn-login { width: 100%; background-color: #2c3e50; color: white; padding: 12px; border: none; border-radius: 4px; font-weight: bold; font-size: 15px; cursor: pointer; text-transform: uppercase; transition: background 0.2s; }
+        .btn-login:hover { background-color: #34495e; }
+        .error-banner { background-color: #fce4e4; border: 1px solid #f6b0b0; color: #cc0000; padding: 12px; border-radius: 4px; margin-bottom: 20px; font-size: 14px; }
+        .footer-links { text-align: center; margin-top: 20px; font-size: 13px; }
+        .footer-links a { color: #3498db; text-decoration: none; font-weight: bold; }
+        .footer-links a:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+
+<div class="login-container">
+    <div class="login-header">
+        <h2>📰 News Portal</h2>
+        <p>Sign in to access your Workspace Control Hub</p>
+    </div>
+
+    {% if form.errors %}
+        <div class="error-banner">
+            Your username and password did not match. Please try again.
+        </div>
+    {% endif %}
+
+    <form method="POST" action="{% url 'login' %}">
+        {% csrf_token %}
+        
+        <div class="form-group">
+            <label for="id_username">Username</label>
+            <input type="text" name="username" id="id_username" required autofocus placeholder="Enter your username">
+        </div>
+        
+        <div class="form-group">
+            <label for="id_password">Password</label>
+            <input type="password" name="password" id="id_password" required placeholder="Enter your security credentials">
+        </div>
+        
+        {# Redirect back to the requested page (like /review/) upon authenticating successfully #}
+        <input type="hidden" name="next" value="{{ next }}">
+        
+        <button type="submit" class="btn-login">Sign In</button>
+    </form>
+
+    <div class="footer-links">
+        <a href="{% url 'system_landing_page' %}">← Back to Public Site</a>
+    </div>
+</div>
+
+</body>
+</html>

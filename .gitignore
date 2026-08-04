@@ -1,0 +1,50 @@
+# ==========================================
+# Django Framework & Python Outputs
+# ==========================================
+*.pyc
+*.pyo
+*.pyd
+__pycache__/
+*.cfg
+*.json
+
+# ==========================================
+# Local Database / State Engine Storage
+# ==========================================
+# Prevents overwriting local test data models
+db.sqlite3
+db.sqlite3-journal
+
+# ==========================================
+# Virtual Environments & System Dependencies
+# ==========================================
+.venv/
+venv/
+ENV/
+env/
+lib/
+lib64/
+bin/
+include/
+share/
+
+# ==========================================
+# Sensitive Environmental Variables & Secrets
+# ==========================================
+.env
+.secrets
+*.key
+*.token
+
+# ==========================================
+# Operating System & IDE Specific Artifacts
+# ==========================================
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp
