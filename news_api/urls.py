@@ -2,7 +2,7 @@
 URL Routing Configuration for the News Portal.
 
 Maps address paths to corresponding public template views, authenticated 
-editor dashboard areas, browser logouts, and REST API network endpoints.
+editor dashboard area, browser logouts, and REST API network endpoints.
 """
 from django.urls import path
 from django.contrib.auth import views as auth_views

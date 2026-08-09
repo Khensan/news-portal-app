@@ -1,6 +1,5 @@
 """
 Views Module for the News Portal Application.
-
 Handles public reader HTML template rendering, secure editorial dashboard administration,
 and Django REST Framework API endpoints for content syndication.
 """
@@ -30,7 +29,9 @@ User = get_user_model()
 
 def article_list(request):
     """
+
     Renders the public homepage view displaying all approved articles.
+    
     """
     articles = Article.objects.filter(approved=True).order_by('-created_at')
     return render(request, 'news_api/home.html', {'articles': articles})
@@ -38,7 +39,9 @@ def article_list(request):
 
 def article_detail(request, pk):
     """
+
     Renders an individual approved article detail layout view for public readers.
+    
     """
     article = get_object_or_404(Article, pk=pk, approved=True)
     return render(request, 'news_api/article_detail.html', {'article': article})
@@ -46,7 +49,9 @@ def article_detail(request, pk):
 
 def newsletter_list(request):
     """
+
     Renders the newsletter archive platform index page.
+    
     """
     newsletters = Newsletter.objects.all().order_by('-created_at')
     return render(request, 'news_api/newsletter_list.html', {'newsletters': newsletters})
@@ -59,7 +64,9 @@ def newsletter_list(request):
 @api_view(['GET'])
 def api_root_landing(request, format=None):
     """
+
     Core Landing Page Index for the News Portal API engine.
+    
     """
     return Response({
         'message': 'Welcome to the News Portal API engine!',
@@ -83,7 +90,6 @@ def is_editor_check(user):
 def portal_html_dashboard(request):
     """
     Render the administrative editorial control panel workspace.
-    
     Accessible only to authenticated users with an 'EDITOR' role profile flag.
     """
     pending_count = Article.objects.filter(approved=False).count()
@@ -160,8 +166,7 @@ def review_articles_list(request):
 @user_passes_test(is_editor_check)
 def approve_article_action(request, article_id):
     """
-    Process article approval validation states via POST transaction.
-    
+    Process article approval validation states via POST transaction.    
     Triggers automated subscriber email dispatches and web service receipt handshakes.
     """    
     if request.method == 'POST':
@@ -209,8 +214,7 @@ class APIApprovedLogEndpoint(APIView):
 
 class APIApprovedLogEndpoint(APIView):
     """
-    API receiver endpoint validating external editorial authorization acknowledgements.
-    
+    API receiver endpoint validating external editorial authorization acknowledgements.    
     Accepts safe open POST payloads from system moderation triggers.
     """
     permission_classes = [permissions.AllowAny] 
@@ -220,8 +224,7 @@ class APIApprovedLogEndpoint(APIView):
 
 class ArticleListCreateAPIView(generics.ListCreateAPIView):
     """
-    API endpoint for listing published articles or submitting new draft records.
-    
+    API endpoint for listing published articles or submitting new draft records.    
     Creation features are limited exclusively to authenticated Journalists.
     """
     queryset = Article.objects.filter(approved=True)
@@ -234,7 +237,9 @@ class ArticleListCreateAPIView(generics.ListCreateAPIView):
 
 class ArticleSubscribedListAPIView(generics.ListAPIView):
     """
+
     Returns custom timeline of approved articles from subscribed sources.
+    
     """
     serializer_class = ArticleSerializer
     permission_classes = [permissions.IsAuthenticated]
@@ -253,7 +258,9 @@ class ArticleSubscribedListAPIView(generics.ListAPIView):
 
 class ArticleDetailAPIView(generics.RetrieveUpdateDestroyAPIView):
     """
+
     Handles retrieving, updating, and deleting a single article instance.
+    
     """
     queryset = Article.objects.all()
     serializer_class = ArticleSerializer
@@ -262,7 +269,9 @@ class ArticleDetailAPIView(generics.RetrieveUpdateDestroyAPIView):
 
 class NewsletterListCreateAPIView(generics.ListCreateAPIView):
     """
+
     Handles listing out newsletters and creating new newsletter collections.
+    
     """
     queryset = Newsletter.objects.all()
     serializer_class = NewsletterSerializer
