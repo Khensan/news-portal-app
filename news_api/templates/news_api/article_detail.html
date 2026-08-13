@@ -14,8 +14,17 @@
         h1 { color: #2c3e50; margin-top: 0; }
         .meta { color: #7f8c8d; font-size: 14px; margin-bottom: 30px; padding-bottom: 10px; border-bottom: 1px solid #eee; }
         .content { line-height: 1.8; font-size: 18px; color: #444; white-space: pre-line; }
-        .back-link { display: inline-block; margin-top: 30px; color: #3498db; text-decoration: none; font-weight: bold; }
+        .back-link { display: inline-block; color: #3498db; text-decoration: none; font-weight: bold; }
         .back-link:hover { text-decoration: underline; }
+        
+        /* New styling layer for administrative action mechanics */
+        .action-toolbar { background-color: #f8f9fa; border: 1px solid #e9ecef; padding: 15px 25px; border-radius: 6px; margin-top: 40px; display: flex; justify-content: space-between; align-items: center; }
+        .action-buttons { display: flex; gap: 12px; }
+        .btn { display: inline-block; padding: 8px 16px; border-radius: 4px; font-weight: bold; text-decoration: none; font-size: 14px; cursor: pointer; border: none; }
+        .btn-warning { background-color: #f39c12; color: white; }
+        .btn-warning:hover { background-color: #e67e22; }
+        .btn-danger { background-color: #e74c3c; color: white; }
+        .btn-danger:hover { background-color: #c0392b; }
     </style>
 </head>
 <body>
@@ -23,28 +32,54 @@
 <nav class="navbar">
     <h1>📰 News Portal System</h1>
     <div>
-        <a href="{% url 'system_landing_page' %}">Home</a>
-        <a href="{% url 'newsletter_list' %}">Newsletters</a>
-        <!-- ADDITION: Maintained navigation sync to the dashboard route -->
-        <a href="{% url 'editorial_dashboard' %}">Editor Dashboard</a>
+        <a href="{% url 'news_api:system_landing_page' %}">Home</a>
+        <!-- FIXED: Re-added missing colon to complete structural template variable resolution -->
+        <a href="{% url 'news_api:newsletter_list' %}">Newsletters</a>
+        <a href="{% url 'news_api:editorial_dashboard' %}">Editor Dashboard</a>
     </div>
 </nav>
 
 <div class="container">
     <h1>{{ article.title }}</h1>
-    <div class="meta">
+   <div class="meta">
+    {% if article.author_id %}
         By <strong>{{ article.author.get_full_name|default:article.author.username }}</strong> 
         {% if article.publisher %} via <em>{{ article.publisher.name }}</em>{% endif %}
+    {% else %}
+        By <strong>{{ article.publisher.name|default:"Independent News Network" }}</strong>
+    {% endif %}
 
-        | Created: {{ article.created_at|date:"M d, Y" }}
-    </div>
-    
+    | Created: {{ article.created_at|date:"M d, Y" }}
+</div>
     <div class="content">
         {# Fallback mechanism accommodates both 'content' and 'body' database fields #}
-        {{ article.content|default:article.body|linebreaks }}
+{{ article.content|linebreaks }}
     </div>
     
-    <a href="{% url 'system_landing_page' %}" class="back-link">← Back to Articles</a>
+    <!-- Role-Based Authorization Dashboard Interface Controls -->
+    <!-- Accessible dynamically by Editors and Journalists via content type tokens -->
+    {% if perms.news_api.change_article or perms.news_api.delete_article %}
+    <div class="action-toolbar">
+        <span style="font-size: 14px; color: #7f8c8d;"><strong>Editorial Options:</strong> Active management permissions available for your profile group.</span>
+        <div class="action-buttons">
+            
+            <!-- Visible to Editors and Journalists who have permission to update articles -->
+            {% if perms.news_api.change_article %}
+                <a href="{% url 'news_api:article_update' article.id %}" class="btn btn-warning">📝 Edit Article</a>
+            {% endif %}
+
+            <!-- Visible to Editors and Journalists who have permission to delete articles -->
+            {% if perms.news_api.delete_article %}
+                <a href="{% url 'news_api:article_delete' article.id %}" class="btn btn-danger" onclick="return confirm('Are you sure you want to permanently delete this news article record?');">🗑️ Delete</a>
+            {% endif %}
+            
+        </div>
+    </div>
+    {% endif %}
+
+    <div style="margin-top: 30px;">
+        <a href="{% url 'news_api:system_landing_page' %}" class="back-link">← Back to Articles</a>
+    </div>
 </div>
 
 </body>

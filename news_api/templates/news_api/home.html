@@ -3,49 +3,101 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{ article.title }} - News Portal</title>
+    <title>Home - News Portal</title>
     <style>
         body { font-family: 'Segoe UI', sans-serif; background-color: #f4f7f6; color: #333; margin: 0; padding-bottom: 60px; }
         .navbar { background-color: #2c3e50; color: white; padding: 15px 30px; display: flex; justify-content: space-between; align-items: center; }
         .navbar h1 { margin: 0; font-size: 24px; }
         .navbar a { color: #ecf0f1; text-decoration: none; margin-left: 20px; font-weight: bold; font-size: 14px; }
         .navbar a:hover { color: #3498db; }
+        .nav-links { display: flex; align-items: center; }
+        .user-greeting { margin-left: 20px; font-size: 13px; color: #bdc3c7; }
         .container { max-width: 800px; margin: 40px auto; padding: 0 20px; }
-        .back-link { display: inline-block; margin-bottom: 20px; color: #3498db; text-decoration: none; font-weight: bold; }
-        .article-wrapper { background: white; padding: 40px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
-        .article-title { margin-top: 0; font-size: 32px; color: #2c3e50; line-height: 1.2; }
-        .meta-info { margin: 20px 0 30px 0; padding-bottom: 20px; border-bottom: 1px solid #eee; color: #7f8c8d; font-size: 14px; }
-        .article-body { line-height: 1.8; font-size: 16px; color: #2c3e50; white-space: pre-line; }
+        .article-card { background: white; padding: 30px; margin-bottom: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+        .article-title { margin-top: 0; font-size: 24px; color: #2c3e50; }
+        .article-title a { color: #2c3e50; text-decoration: none; }
+        .article-title a:hover { color: #3498db; }
+        .meta-info { margin: 10px 0 15px 0; color: #7f8c8d; font-size: 14px; }
+        .article-preview { line-height: 1.6; color: #555; }
+        .read-more { display: inline-block; margin-top: 15px; color: #3498db; text-decoration: none; font-weight: bold; }
+        .no-articles { text-align: center; color: #7f8c8d; padding: 40px; background: white; border-radius: 8px; }
     </style>
 </head>
 <body>
 
 <nav class="navbar">
     <h1>📰 News Portal System</h1>
-    <div>
-        <a href="{% url 'system_landing_page' %}">Home</a>
-        <a href="{% url 'newsletter_list' %}">Newsletters</a>
-        <a href="{% url 'editorial_dashboard' %}">Editor Dashboard</a>
+    <div class="nav-links">
+        <a href="{% url 'news_api:system_landing_page' %}">Home</a>
+        <a href="{% url 'news_api:newsletter_list' %}">Newsletters</a>
+        
+        <!-- SYSTEM AUTHENTICATION INTERFACE CONTEXT -->
+        {% if user.is_authenticated %}
+            <!-- Universal redirect button routes safely using backend view rules -->
+            <a href="{% url 'news_api:dashboard_redirect' %}" style="color: #3498db;">My Dashboard</a>
+            
+            <!-- FIXED: Group Navigation mapped directly to structural framework permissions -->
+            {% if perms.news_api.add_article %}
+                <!-- Authoring capabilities identify an authenticated Journalist -->
+                <a href="{% url 'news_api:journalist_dashboard' %}" style="color: #16a085;">Journalist Console</a>
+            {% elif perms.news_api.change_article %}
+                <!-- Modification privileges without adding indicates a System Editor -->
+                <a href="{% url 'news_api:editorial_dashboard' %}">Editor Dashboard</a>
+                <a href="{% url 'news_api:review_list' %}">Review Queue</a>
+            {% else %}
+                <!-- Fallback framework parameters display the standard Reader interface -->
+                <a href="{% url 'news_api:reader_dashboard' %}">Reader Panel</a>
+            {% endif %}
+            
+            <span class="user-greeting">Welcome, <strong>{{ user.username }}</strong></span>
+            
+            <!-- Secure POST sign-out token pipeline management -->
+            <form action="{% url 'news_api:logout' %}" method="POST" style="display: inline; margin-left: 20px;">
+                {% csrf_token %}
+                <button type="submit" style="background: none; border: none; color: #e74c3c; font-weight: bold; font-size: 14px; cursor: pointer; font-family: inherit; padding: 0;">
+                    Sign Out
+                </button>
+            </form>
+        {% else %}
+            <!-- Displayed strictly to anonymous web traffic visitors -->
+            <a href="{% url 'news_api:login' %}">Sign In</a>
+            <a href="{% url 'news_api:register' %}" style="color: #2ecc71;">Register Account</a>
+        {% endif %}
     </div>
 </nav>
 
 <div class="container">
-    <a href="{% url 'system_landing_page' %}" class="back-link">← Back to Articles</a>
+    <h2>Latest Approved Articles</h2>
     
-    <article class="article-wrapper">
-        <h1 class="article-title">{{ article.title }}</h1>
-        
-        <div class="meta-info">
-            By <strong>{{ article.author.get_full_name|default:article.author.username }}</strong>
-            {% if article.publisher %} via <em>{{ article.publisher.name }}</em>{% endif %}
+    {% for article in articles %}
+        <div class="article-card">
+            <h3 class="article-title">
+                <a href="{% url 'news_api:article_detail' article.pk %}">{{ article.title }}</a>
+            </h3>
+            
+            <div class="meta-info">
+    {% if article.author_id %}
+        By <strong>{{ article.author.get_full_name|default:article.author.username }}</strong>
+        {% if article.publisher %} via <em>{{ article.publisher.name }}</em>{% endif %}
+    {% else %}
+        By <strong>{{ article.publisher.name|default:"Independent Network" }}</strong>
+    {% endif %}
 
-            | Published on {{ article.created_at|date:"F d, Y P" }}
+    | {{ article.created_at|date:"F d, Y" }}
+</div>
+
+            
+            <div class="article-preview">
+{{ article.content|truncatewords:30 }}
+            </div>
+            
+            <a href="{% url 'news_api:article_detail' article.pk %}" class="read-more">Read Full Article →</a>
         </div>
-        
-        <div class="article-body">
-            {{ article.content|default:article.body }}
+    {% empty %}
+        <div class="no-articles">
+            <p>No approved articles are currently available on the feed.</p>
         </div>
-    </article>
+    {% endfor %}
 </div>
 
 </body>

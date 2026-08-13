@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Curate New Newsletter - News System</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background-color: #f4f7f6; margin: 40px; }
+        .form-container { max-width: 600px; margin: 0 auto; background: white; padding: 35px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); border-top: 4px solid #16a085; }
+        h2 { color: #2c3e50; margin-top: 0; }
+        .form-group { margin-bottom: 20px; }
+        label { display: block; font-weight: bold; margin-bottom: 8px; color: #34495e; }
+        input[type="text"], textarea, select { width: 100%; padding: 12px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; font-family: inherit; font-size: 15px; }
+        textarea { height: 120px; resize: vertical; }
+        select[multiple] { height: 180px; }
+        .help-text { font-size: 12px; color: #7f8c8d; margin-top: 4px; }
+        .btn-submit { background-color: #16a085; color: white; border: none; padding: 12px 24px; border-radius: 4px; font-weight: bold; cursor: pointer; text-transform: uppercase; font-size: 13px; margin-top: 10px; width: 100%; }
+        .btn-submit:hover { background-color: #148f77; }
+        .back-link { display: inline-block; margin-top: 20px; color: #7f8c8d; text-decoration: none; font-size: 14px; }
+        .back-link:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+
+    <div class="form-container">
+        <h2>Curate a New Newsletter Digest</h2>
+        <p style="color: #7f8c8d; font-size: 14px; margin-bottom: 25px;">Logged in as Author: <strong>{{ request.user.username }}</strong></p>
+        
+        <form method="POST">
+            {% csrf_token %}
+            
+            {% if form.errors %}
+                <div style="background: #fde8e8; border: 1px solid #e74c3c; padding: 15px; border-radius: 4px; color: #c0392b; margin-bottom: 20px; font-size: 14px;">
+                    <strong>Please clear form processing errors prior to saving.</strong>
+                </div>
+            {% endif %}
+
+            <div class="form-group">
+                <label for="id_title">Newsletter Title</label>
+                {{ form.title }}
+            </div>
+
+            <div class="form-group">
+                <label for="id_description">Summary Description</label>
+                {{ form.description }}
+            </div>
+
+            <div class="form-group">
+                <label for="id_articles">Select Curated Articles</label>
+                {{ form.articles }}
+                <div class="help-text">💡 Hold down 'Ctrl' (Windows) or 'Command' (Mac) to select multiple stories simultaneously.</div>
+            </div>
+
+            <button type="submit" class="btn-submit">🚀 Dispatch Newsletter Issue</button>
+        </form>
+
+        <a href="{% url 'news_api:newsletter_list' %}" class="back-link">← Cancel and Return to Archive</a>
+    </div>
+
+</body>
+</html>

@@ -1,0 +1,90 @@
+<!-- templates/news_api/register.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>News Portal - Register Account</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background-color: #f4f7f6; color: #333; margin: 0; display: flex; justify-content: center; align-items: center; min-height: 100vh; padding: 20px 0; box-sizing: border-box; }
+        .register-container { background: white; padding: 40px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.08); width: 100%; max-width: 450px; border-top: 5px solid #27ae60; }
+        .register-header { text-align: center; margin-bottom: 25px; }
+        .register-header h2 { margin: 0; color: #2c3e50; font-size: 26px; }
+        .register-header p { color: #7f8c8d; font-size: 14px; margin-top: 5px; }
+        
+        /* Form Field Layout Styling */
+        .form-group { margin-bottom: 18px; }
+        .form-group label { display: block; margin-bottom: 6px; font-weight: bold; font-size: 14px; color: #2c3e50; }
+        
+        /* Explicit layout override forces clean presentation over native inputs and selectors */
+        .form-group input, .form-group select { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; font-size: 15px; font-family: inherit; }
+        .form-group input:focus, .form-group select:focus { border-color: #27ae60; outline: none; box-shadow: 0 0 5px rgba(39, 174, 96, 0.2); }
+        
+        /* Help Text & Error Label Matrix */
+        .help-text { display: block; color: #7f8c8d; font-size: 11px; margin-top: 4px; line-height: 1.4; }
+        .field-error { color: #c0392b; font-size: 12px; margin-top: 4px; font-weight: 500; }
+        .error-banner { background-color: #fce4e4; border: 1px solid #f6b0b0; color: #cc0000; padding: 12px; border-radius: 4px; margin-bottom: 20px; font-size: 14px; }
+        .mt-1 { margin-top: 4px; }
+        
+        .btn-register { width: 100%; background-color: #27ae60; color: white; padding: 12px; border: none; border-radius: 4px; font-weight: bold; font-size: 15px; cursor: pointer; text-transform: uppercase; transition: background 0.2s; margin-top: 10px; }
+        .btn-register:hover { background-color: #219653; }
+        .footer-links { text-align: center; margin-top: 20px; font-size: 13px; }
+        .footer-links a { color: #3498db; text-decoration: none; font-weight: bold; }
+        .footer-links a:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+
+<div class="register-container">
+    <div class="register-header">
+        <h2>📰 Create Account</h2>
+        <p>Join the News Portal System Network</p>
+    </div>
+
+    <!-- Global form error banner validation -->
+    {% if form.errors %}
+        <div class="error-banner">
+            <strong>Registration Blocked:</strong> Please correct the flagged inputs listed below.
+            {% if form.non_field_errors %}
+                {% for error in form.non_field_errors %}
+                    <div class="mt-1">{{ error }}</div>
+                {% endfor %}
+            {% endif %}
+        </div>
+    {% endif %}
+
+    <form method="POST" action="{% url 'news_api:register' %}">
+        {% csrf_token %}
+        
+        <!-- Render Fields Manually to Break Out of Form.as_p Formatting Constraints -->
+        <!-- Loops natively over CustomUserRegistrationForm to present all fields including role selections and publisher name strings -->
+        {% for field in form %}
+            <div class="form-group">
+                <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                
+                <!-- Explicitly injects CSS layouts while maintaining field data states natively -->
+                {{ field }}
+                
+                <!-- Display field-specific parameters like password rules -->
+                {% if field.help_text %}
+                    <span class="help-text">{{ field.help_text|safe }}</span>
+                {% endif %}
+                
+                <!-- Display individual field errors inline -->
+                {% for error in field.errors %}
+                    <div class="field-error">⚠️ {{ error }}</div>
+                {% endfor %}
+            </div>
+        {% endfor %}
+        
+        <button type="submit" class="btn-register">Register Account</button>
+    </form>
+
+    <div class="footer-links">
+        <p>Already registered? <a href="{% url 'news_api:login' %}">Sign In Here</a></p>
+        <a href="{% url 'news_api:system_landing_page' %}">← Back to Public Site</a>
+    </div>
+</div>
+
+</body>
+</html>

@@ -1,15 +1,32 @@
-import os
+# news_project/settings.py
+"""
+Django settings configuration module for the news_project web platform ecosystem.
+
+Manages application security parameters, dynamic routing variables, 
+database connections, third-party authentication configurations, and user model tracking.
+"""
+
 from pathlib import Path
 
+# Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# Quick-start development settings - unsuitable for production
+# See https://djangoproject.com
+
+# SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = 'django-insecure-your-secret-key-here'
 
+# SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['localhost', '127.0.0.1', '0.0.0.0']
+ALLOWED_HOSTS = []
 
-# Application definition
+
+# ==========================================
+# APPLICATION PIPELINES & USER STRUCTURES
+# ==========================================
+
 INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
@@ -18,16 +35,21 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     
-    # Third-party applications
+    # Third-party extensions
     'rest_framework',
-    'rest_framework.authtoken',
+    'rest_framework_simplejwt',
     
-    # Your custom application
+    # Core multi-tenant application layer
     'news_api',
 ]
 
-# Tell Django to use your CustomUser instead of the default User model
+# Explicitly maps authentication routines to your custom role-based User model
 AUTH_USER_MODEL = 'news_api.CustomUser'
+
+
+# ==========================================
+# MIDDLEWARE & SECURITY DISPATCH MATRICES
+# ==========================================
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
@@ -44,7 +66,7 @@ ROOT_URLCONF = 'news_project.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        #  Explicit global template search paths added below
+        # Explicit search path targets ensure multi-tenant dashboard templates are located efficiently
         'DIRS': [BASE_DIR / 'templates'],
         'APP_DIRS': True,
         'OPTIONS': {
@@ -60,6 +82,11 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'news_project.wsgi.application'
 
+
+# ==========================================
+# DATABASE STORAGE STORAGE MANAGEMENT
+# ==========================================
+
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.mysql',
@@ -71,17 +98,49 @@ DATABASES = {
     }
 }
 
+
+# ==========================================
+# THIRD-PARTY FRAMEWORK AUTH DEFINITIONS
+# ==========================================
+
 REST_FRAMEWORK = {
-    'DEFAULT_AUTHENTICATION_CLASSES': [
-        'rest_framework.authentication.TokenAuthentication',
-        'rest_framework.authentication.SessionAuthentication', # Added to support web browsing editors
-    ],
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    ),
+    'DEFAULT_PERMISSION_CLASSES': (
+        'rest_framework.permissions.IsAuthenticated',
+    ),
 }
 
-#  Browser Web Authentication Redirection Variables (Fixes Issue 2)
-LOGIN_URL = '/accounts/login/'
-LOGIN_REDIRECT_URL = '/dashboard/'
-LOGOUT_REDIRECT_URL = '/'
+
+# ==========================================
+# LOCAL SESSION AND SECURITY OVERRIDES
+# ==========================================
+
+SESSION_COOKIE_SECURE = False
+CSRF_COOKIE_SECURE = False
+
+SESSION_COOKIE_SAMESITE = 'Lax'
+CSRF_COOKIE_SAMESITE = 'Lax'
+
+
+# ==========================================
+# ROLE-BASED WORKSPACE REDIRECTION TARGETS
+# ==========================================
+
+# Route path where unauthenticated browser threads are sent to authenticate
+LOGIN_URL = 'news_api:login'
+
+# router view. This breaks the hard-cached browser '?next=' login loops natively.
+LOGIN_REDIRECT_URL = 'news_api:dashboard_redirect'
+
+# Fallback path routing user sessions immediately upon active session logouts
+LOGOUT_REDIRECT_URL = 'news_api:system_landing_page'
+
+
+# ==========================================
+# STATIC GRAPHICS & HARDWARE STORAGE RULES
+# ==========================================
 
 STATIC_URL = 'static/'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'

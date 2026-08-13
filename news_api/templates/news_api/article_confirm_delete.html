@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Confirm Article Destruction</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background-color: #f4f7f6; margin: 40px; text-align: center; }
+        .confirm-box { max-width: 500px; margin: 50px auto; background: white; padding: 40px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); border-top: 4px solid #e74c3c; }
+        .btn-cancel { background: #7f8c8d; color: white; padding: 10px 20px; text-decoration: none; border-radius: 4px; font-weight: bold; margin-right: 10px; }
+        .btn-danger { background: #e74c3c; color: white; border: none; padding: 10px 20px; border-radius: 4px; font-weight: bold; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <div class="confirm-box">
+        <h2>⚠️ Warning: Permanent Action</h2>
+        <p>Are you absolutely sure you want to delete the story entry: <strong>"{{ object.title }}"</strong>?</p>
+        <form method="POST">
+            {% csrf_token %}
+            <a href="{% url 'news_api:article_detail' object.id %}" class="btn-cancel">Cancel</a>
+            <button type="submit" class="btn-danger">Confirm Delete</button>
+        </form>
+    </div>
+</body>
+</html>

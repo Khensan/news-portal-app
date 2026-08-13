@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Platform Management - Initialize Independent Publisher</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background-color: #f4f7f6; color: #333; margin: 0; }
+        .navbar { background-color: #2c3e50; color: white; padding: 15px 30px; display: flex; justify-content: space-between; align-items: center; }
+        .navbar h1 { margin: 0; font-size: 22px; }
+        .navbar a { color: #ecf0f1; text-decoration: none; font-weight: bold; font-size: 14px; }
+        .container { max-width: 600px; margin: 50px auto; padding: 0 20px; box-sizing: border-box; }
+        .card { background: white; padding: 40px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.06); border-top: 5px solid #e67e22; }
+        .card h2 { margin-top: 0; color: #2c3e50; font-size: 24px; }
+        .card p { color: #7f8c8d; font-size: 14px; line-height: 1.5; margin-bottom: 25px; }
+        
+        /* Administrative Form Content Layouts */
+        .form-group { margin-bottom: 22px; }
+        .form-group label.field-title { display: block; font-weight: bold; margin-bottom: 6px; font-size: 14px; color: #34495e; }
+        .help-text { font-size: 12px; color: #7f8c8d; display: block; margin-bottom: 8px; line-height: 1.4; }
+        
+        /* Scrollable Checklist Containers for Staff Assignment */
+        .checkbox-list-wrapper { background: #fafbfc; border: 1px solid #ecf0f1; padding: 15px; border-radius: 4px; max-height: 160px; overflow-y: auto; box-sizing: border-box; }
+        .checkbox-list-wrapper label { font-weight: normal; color: #2c3e50; cursor: pointer; display: flex; align-items: center; gap: 8px; margin-bottom: 10px; font-size: 14px; }
+        .checkbox-list-wrapper label:last-child { margin-bottom: 0; }
+        .checkbox-list-wrapper input[type="checkbox"] { margin: 0; width: 16px; height: 16px; cursor: pointer; }
+        
+        /* Error Label Metrics */
+        .field-error { color: #c0392b; font-size: 13px; margin-top: 5px; font-weight: 500; display: block; }
+        
+        .btn-submit { display: block; width: 100%; padding: 12px; background-color: #e67e22; color: white; text-align: center; border: none; border-radius: 4px; font-weight: bold; font-size: 15px; cursor: pointer; text-transform: uppercase; margin-top: 30px; letter-spacing: 0.5px; transition: background 0.2s; }
+        .btn-submit:hover { background-color: #d35400; }
+        
+        /* Text input widget baseline styling override */
+        input[type="text"].form-control { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; font-size: 15px; }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <h1>📰 News Portal System</h1>
+        <div>
+            <a href="{% url 'news_api:dashboard_redirect' %}">← Back to Portal</a>
+        </div>
+    </nav>
+    
+    <div class="container">
+        <div class="card">
+            <h2>⚙️ Initialize Independent Publisher</h2>
+            <p>
+                Use this management interface to provision a new standalone publication network profile. 
+                You can select and link unassigned user profiles to establish their team rosters right away.
+            </p>
+            
+            <form method="POST">
+                {% csrf_token %}
+                
+                <!-- 1. Publisher Name Entry -->
+                <div class="form-group">
+                    <label for="id_name" class="field-title">Publisher Corporate Entity Name</label>
+                    <!-- Injects your form name field input with standard classes -->
+                    <input type="text" name="name" id="id_name" class="form-control" placeholder="e.g., Daily News Global" required value="{{ form.name.value|default:'' }}">
+                    {% if form.name.errors %}
+                        {% for error in form.name.errors %}
+                            <span class="field-error">⚠️ {{ error }}</span>
+                        {% endfor %}
+                    {% endif %}
+                </div>
+                
+                <!-- 2. Administrative Workspace Manager Checklist Select Block -->
+                <div class="form-group">
+                    <label class="field-title">Allocate Workspace Managers (Editors)</label>
+                    {% if form.editors.help_text %}
+                        <span class="help-text">{{ form.editors.help_text }}</span>
+                    {% endif %}
+                    <div class="checkbox-list-wrapper">
+                        <!-- FIXED: Loops over choices matching your explicit backend field key name -->
+                        {% for checkbox in form.editors %}
+                            <label>{{ checkbox.tag }} {{ checkbox.choice_label }}</label>
+                        {% empty %}
+                            <span style="font-size: 13px; color: #7f8c8d; display: block; padding: 5px 0;">No unassigned Editors are currently available in the directory pool.</span>
+                        {% endfor %}
+                    </div>
+                    {% if form.editors.errors %}
+                        {% for error in form.editors.errors %}
+                            <span class="field-error">⚠️ {{ error }}</span>
+                        {% endfor %}
+                    {% endif %}
+                </div>
+
+                <!-- 3. Staff Writer / Journalist Checklist Select Block -->
+                <div class="form-group">
+                    <label class="field-title">Allocate Staff Writers (Journalists)</label>
+                    {% if form.journalists.help_text %}
+                        <span class="help-text">{{ form.journalists.help_text }}</span>
+                    {% endif %}
+                    <div class="checkbox-list-wrapper">
+                        <!-- FIXED: Loops over choices matching your explicit backend field key name -->
+                        {% for checkbox in form.journalists %}
+                            <label>{{ checkbox.tag }} {{ checkbox.choice_label }}</label>
+                        {% empty %}
+                            <span style="font-size: 13px; color: #7f8c8d; display: block; padding: 5px 0;">No unassigned Journalists are currently available in the directory pool.</span>
+                        {% endfor %}
+                    </div>
+                    {% if form.journalists.errors %}
+                        {% for error in form.journalists.errors %}
+                            <span class="field-error">⚠️ {{ error }}</span>
+                        {% endfor %}
+                    {% endif %}
+                </div>
+                
+                <button type="submit" class="btn-submit">Provision & Assign Organization</button>
+            </form>
+        </div>
+    </div>
+</body>
+</html>

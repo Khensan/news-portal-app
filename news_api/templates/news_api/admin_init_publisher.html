@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Platform Management - Initialize Independent Publisher</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background-color: #f4f7f6; color: #333; margin: 0; padding: 40px 20px; }
+        .admin-card { background: white; max-width: 600px; margin: 0 auto; padding: 40px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.06); border-top: 5px solid #e67e22; }
+        .admin-card h2 { margin-top: 0; color: #2c3e50; font-size: 24px; }
+        .form-group { margin-bottom: 22px; }
+        .form-group label { display: block; font-weight: bold; margin-bottom: 8px; color: #34495e; font-size: 14px; }
+        .form-control { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+        .help-text { font-size: 12px; color: #7f8c8d; display: block; margin-top: 4px; }
+        .checkbox-list { background: #fafbfc; border: 1px solid #ecf0f1; padding: 15px; border-radius: 4px; max-height: 150px; overflow-y: auto; font-size: 14px; }
+        .checkbox-list label { font-weight: normal; display: block; margin-bottom: 8px; cursor: pointer; }
+        .field-error { color: #c0392b; font-size: 12px; margin-top: 4px; font-weight: 500; }
+        .btn-submit { display: block; width: 100%; padding: 12px; background-color: #e67e22; color: white; border: none; border-radius: 4px; font-weight: bold; cursor: pointer; text-transform: uppercase; letter-spacing: 0.5px; }
+        .btn-submit:hover { background-color: #d35400; }
+    </style>
+</head>
+<body>
+
+<div class="admin-card">
+    <h2>⚙️ Platform Administration: Initialize Publisher</h2>
+    <p style="color:#7f8c8d; font-size:14px; margin-bottom:30px;">
+        Create a standalone publication network profile and explicitly map independent user accounts to its staffing ecosystem.
+    </p>
+
+    <form method="POST">
+        {% csrf_token %}
+        
+        <div class="form-group">
+            <label for="id_name">Publisher Corporate Entity Name</label>
+            {{ form.name }}
+            {% for error in form.name.errors %}
+                <div class="field-error">⚠️ {{ error }}</div>
+            {% endfor %}
+        </div>
+
+        <div class="form-group">
+            <label>Allocate Workspace Managers (Editors)</label>
+            <span class="help-text">{{ form.assign_editors.help_text }}</span>
+            <div class="checkbox-list" style="margin-top: 10px;">
+                {{ form.assign_editors }}
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label>Allocate Staff Writers (Journalists)</label>
+            <span class="help-text">{{ form.assign_journalists.help_text }}</span>
+            <div class="checkbox-list" style="margin-top: 10px;">
+                {{ form.assign_journalists }}
+            </div>
+        </div>
+
+        <button type="submit" class="btn-submit">Provision & Assign Organization</button>
+    </form>
+</div>
+
+</body>
+</html>

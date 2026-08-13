@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Submit Article Draft</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background-color: #f4f7f6; margin: 40px; }
+        .form-container { max-width: 600px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+        .form-group { margin-bottom: 20px; }
+        label { display: block; font-weight: bold; margin-bottom: 5px; }
+        input[type="text"], textarea, select { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+        textarea { height: 200px; }
+        .btn-submit { background-color: #16a085; color: white; border: none; padding: 12px 20px; border-radius: 4px; font-weight: bold; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <form method="POST">
+        {% csrf_token %}
+    <div class="form-container">
+        <h2>Draft a New Article</h2>
+        {% if form.errors %}
+            <div style="background-color: #fde8e8; border: 1px solid #e74c3c; padding: 15px; border-radius: 4px; margin-bottom: 20px; color: #c0392b;">
+                <strong>Please resolve the following errors:</strong>
+                {{ form.non_field_errors }}
+                {% for field in form %}
+                    {% if field.errors %}
+                        <p>{{ field.label }}: {{ field.errors|striptags }}</p>
+                    {% endif %}
+                {% endfor %}
+            </div>
+        {% endif %}
+
+        {{ form.as_p }}
+        <button type="submit" class="btn-submit">Submit to Editorial Queue</button>
+    </form>
+</div>
+</body>
+</html>

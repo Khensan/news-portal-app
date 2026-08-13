@@ -22,6 +22,10 @@
         .btn { background: #28a745; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; text-transform: uppercase; font-size: 12px; transition: background 0.2s; }
         .btn:hover { background: #218838; }
         .empty-state { text-align: center; background: white; padding: 50px; border-radius: 6px; border: 1px solid #ddd; color: #7f8c8d; }
+        
+        /* Security Restriction Layout Elements */
+        .alert-card { background: white; padding: 40px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); text-align: center; border-top: 4px solid #e74c3c; margin-top: 20px; }
+        .btn-home { display: inline-block; padding: 10px 20px; background-color: #2c3e50; color: white; text-decoration: none; border-radius: 4px; font-weight: bold; margin-top: 15px; }
     </style>
 </head>
 <body>
@@ -29,44 +33,71 @@
 <nav class="navbar">
     <h1>📰 News Portal System</h1>
     <div>
-        <a href="{% url 'system_landing_page' %}">View Public Site</a>
-        <a href="{% url 'editorial_dashboard' %}">Dashboard Home</a>
+        <a href="{% url 'news_api:system_landing_page' %}">View Public Site</a>
+        <!-- FIXED: Wrapped navigation link to keep layout safe from unauthorized discovery -->
+        {% if perms.news_api.add_article %}
+            <a href="{% url 'news_api:journalist_dashboard' %}">Workspace Home</a>
+        {% elif perms.news_api.change_article %}
+            <a href="{% url 'news_api:editorial_dashboard' %}">Dashboard Home</a>
+        {% endif %}
     </div>
 </nav>
 
 <div class="container">
-    <div class="header-block">
-        <h2>Articles Awaiting Editor Sign-Off</h2>
-        <a href="{% url 'editorial_dashboard' %}" class="back-dash">← Back to Dashboard</a>
-    </div>
-
-    {% for article in articles %}
-        <div class="card">
-            <h3>{{ article.title }}</h3>
-            
-            <div class="meta">
-                {# FIX: Fallback ensures username prints if full name profile is empty #}
-                By: <strong>{{ article.author.get_full_name|default:article.author.username }}</strong> 
-
-                | Publisher: <strong>{{ article.publisher.name|default:"Independent Network" }}</strong>
-                {% if article.created_at %} | Drafted: {{ article.created_at|date:"Y-m-d H:i" }}{% endif %}
-            </div>
-            
-            <div class="article-preview">
-                {# FIX: Handles both schema possibilities and safely truncates text #}
-                "{{ article.content|default:article.body|truncatewords:60 }}"
-            </div>
-            
-            <form action="{% url 'approve_action' article_id=article.id %}" method="POST">
-                {% csrf_token %}
-                <button type="submit" class="btn">Approve & Publish Globally</button>
-            </form>
+    <!-- SECURITY GUARD: Verifies modification privileges before compiling list records -->
+    {% if perms.news_api.change_article %}
+        
+        <div class="header-block">
+            <h2>Articles Awaiting Editor Sign-Off</h2>
+            <!-- FIXED: Dynamic dashboard redirection target path based on group rank -->
+            {% if perms.news_api.add_article %}
+                <a href="{% url 'news_api:journalist_dashboard' %}" class="back-dash">← Back to Workspace</a>
+            {% else %}
+                <a href="{% url 'news_api:editorial_dashboard' %}" class="back-dash">← Back to Dashboard</a>
+            {% endif %}
         </div>
-    {% empty %}
-        <div class="empty-state">
-            <p>No new submissions require evaluation at this moment.</p>
+
+        {% for article in articles %}
+            <div class="card">
+                <h3>{{ article.title }}</h3>
+                
+                <!-- FIXED: Conditional logic safely branches processing to avoid NoneType attribute errors -->
+                <div class="meta">
+                    {% if article.author_id %}
+                        By: <strong>{{ article.author.get_full_name|default:article.author.username }}</strong>
+                        {% if article.publisher_id %} via <em>{{ article.publisher.name }}</em>{% endif %}
+                    {% else %}
+                        By: <strong>{{ article.publisher.name|default:"Independent Publisher" }}</strong> (Publisher Content)
+                    {% endif %}
+                    
+                    {% if article.created_at %} | Drafted: {{ article.created_at|date:"Y-m-d H:i" }}{% endif %}
+                </div>
+                
+                <div class="article-preview">
+                    "{{ article.content|truncatewords:60 }}"
+                </div>
+                
+                <!-- Secure POST request targeting your specific approval view parameter -->
+                <form action="{% url 'news_api:approve_article_action' article_id=article.id %}" method="POST">
+                    {% csrf_token %}
+                    <button type="submit" class="btn">Approve & Publish Globally</button>
+                </form>
+            </div>
+        {% empty %}
+            <div class="empty-state">
+                <p>No new submissions require evaluation at this moment.</p>
+            </div>
+        {% endfor %}
+
+    {% else %}
+        <!-- SECURITY FEEDBACK PANEL: Displays if an unauthorized Reader accesses this route -->
+        <div class="alert-card">
+            <span style="font-size: 50px; display: block; margin-bottom: 15px;">🔒</span>
+            <h3 style="color: #e74c3c; margin-top: 0;">Access Revoked</h3>
+            <p style="color: #7f8c8d; max-width: 500px; margin: 0 auto;">Your current account profile does not possess editorial verification rights. Moderation workspaces are restricted strictly to authorized platform editors.</p>
+            <a href="{% url 'news_api:system_landing_page' %}" class="btn-home">Return to Home Feed</a>
         </div>
-    {% endfor %}
+    {% endif %}
 </div>
 
 </body>

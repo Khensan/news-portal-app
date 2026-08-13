@@ -2,21 +2,29 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Newsletters Archive - News Portal</title>
+    <title>Archived Newsletters - News Portal</title>
     <style>
-        body { font-family: 'Segoe UI', sans-serif; background-color: #f4f7f6; color: #333; margin: 0; padding-bottom: 40px; }
+        body { font-family: 'Segoe UI', sans-serif; background-color: #f4f7f6; color: #333; margin: 0; padding-bottom: 50px; }
         .navbar { background-color: #2c3e50; color: white; padding: 15px 30px; display: flex; justify-content: space-between; align-items: center; }
         .navbar h1 { margin: 0; font-size: 24px; }
         .navbar a { color: #ecf0f1; text-decoration: none; margin-left: 20px; font-weight: bold; }
-        .navbar a:hover { color: #3498db; }
-        .container { max-width: 1000px; margin: 40px auto; padding: 0 20px; }
-        .section-title { color: #2c3e50; border-bottom: 2px solid #bdc3c7; padding-bottom: 10px; margin-bottom: 30px; }
-        .newsletter-card { background: white; padding: 25px; margin-bottom: 15px; border-radius: 6px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); border-left: 5px solid #3498db; }
-        .newsletter-title { font-size: 20px; font-weight: bold; color: #2c3e50; margin-bottom: 8px; }
-        .meta { font-size: 13px; color: #95a5a6; background: #eef2f3; display: inline-block; padding: 4px 8px; border-radius: 4px; margin-bottom: 10px; }
-        .newsletter-desc { color: #555; line-height: 1.6; margin: 0; }
-        .empty-state { text-align: center; background: white; padding: 40px; border-radius: 6px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); color: #7f8c8d; }
+        .container { max-width: 900px; margin: 40px auto; padding: 0 20px; }
+        h2 { color: #2c3e50; border-bottom: 2px solid #16a085; padding-bottom: 10px; margin-bottom: 30px; }
+        
+        /* Newsletter Card Layout */
+        .newsletter-card { background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); margin-bottom: 30px; border-left: 5px solid #16a085; }
+        .newsletter-title { color: #16a085; margin-top: 0; margin-bottom: 5px; font-size: 22px; }
+        .meta { font-size: 13px; color: #7f8c8d; margin-bottom: 15px; }
+        .description { font-size: 16px; color: #555; line-height: 1.6; margin-bottom: 20px; }
+        
+        /* Curated Article Chips */
+        .curated-section { background: #f8f9fa; padding: 15px; border-radius: 6px; border: 1px solid #e9ecef; }
+        .curated-section h4 { margin-top: 0; color: #34495e; margin-bottom: 10px; font-size: 14px; text-transform: uppercase; letter-spacing: 0.5px; }
+        .article-links-grid { display: flex; flex-direction: column; gap: 8px; }
+        .article-link-item { color: #2980b9; text-decoration: none; font-weight: 500; font-size: 15px; display: inline-flex; align-items: center; }
+        .article-link-item:hover { color: #3498db; text-decoration: underline; }
+        
+        .empty-state { text-align: center; background: white; padding: 50px; border-radius: 8px; color: #7f8c8d; border: 1px solid #ddd; }
     </style>
 </head>
 <body>
@@ -24,33 +32,48 @@
 <nav class="navbar">
     <h1>📰 News Portal System</h1>
     <div>
-        <a href="{% url 'system_landing_page' %}">Home</a>
-        <a href="{% url 'newsletter_list' %}">Newsletters</a>
-        <!-- ADDITION: Maintained navigation sync to the dashboard route -->
-        <a href="{% url 'editorial_dashboard' %}">Editor Dashboard</a>
+        <a href="{% url 'news_api:system_landing_page' %}">Home Feed</a>
+        <a href="{% url 'news_api:newsletter_list' %}">Newsletters</a>
     </div>
 </nav>
 
 <div class="container">
-    <h2 class="section-title">Archived Newsletters</h2>
-    
-    {% if newsletters %}
-        {% for newsletter in newsletters %}
-            <div class="newsletter-card">
-                <div class="newsletter-title">{{ newsletter.title }}</div>
-                <div class="meta">
-                    {# Supports author user profile or publisher relation fields #}
-                    Compiled by <strong>{{ newsletter.author.get_full_name|default:newsletter.author.username|default:newsletter.publisher.name }}</strong> 
-                    on {{ newsletter.created_at|date:"M d, Y" }}
-                </div>
-                <p class="newsletter-desc">{{ newsletter.description|default:"No description provided for this archive entry." }}</p>
+    <h2>Archived Newsletters</h2>
+
+    <!-- FIXED: Dynamic loop checks your views payload context and builds the grid -->
+    {% for newsletter in newsletters %}
+        <div class="newsletter-card">
+            <h3 class="newsletter-title">{{ newsletter.title }}</h3>
+            <div class="meta">
+                Curated by: <strong>{{ newsletter.author.get_full_name|default:newsletter.author.username }}</strong> 
+
+                | Issued: {{ newsletter.created_at|date:"F d, Y" }}
             </div>
-        {% endfor %}
-    {% else %}
+            
+            <p class="description">{{ newsletter.description }}</p>
+            
+            <!-- Many-to-Many Unpacking Loop layer -->
+            <div class="curated-section">
+                <h4>📚 Curated Stories Included in this Issue:</h4>
+                <div class="article-links-grid">
+                    {% for article in newsletter.articles.all %}
+                        <!-- Loops over individual approved links bound to this specific layout object instance -->
+                        <a href="{% url 'news_api:article_detail' article.id %}" class="article-link-item">
+                            📰 {{ article.title }} 
+                            <span style="font-size: 12px; color: #95a5a6; margin-left: 10px;">(Read Article →)</span>
+                        </a>
+                    {% empty %}
+                        <span style="color: #95a5a6; font-style: italic; font-size: 14px;">No specific entries were selected for this briefing archive issue.</span>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    {% empty %}
+        <!-- Handles the empty state safely if no records reside inside SQL tables -->
         <div class="empty-state">
             <p>No newsletters are currently listed in the system archive.</p>
         </div>
-    {% endif %}
+    {% endfor %}
 </div>
 
 </body>
