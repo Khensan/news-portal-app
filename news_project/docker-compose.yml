@@ -7,5 +7,9 @@ services:
       - .:/app
     ports:
       - "8000:8000"
+    env_file:
+      - .env
     environment:
       - DJANGO_SETTINGS_MODULE=news_project.settings
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
