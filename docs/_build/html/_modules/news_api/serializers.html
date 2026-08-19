@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>news_api.serializers &#8212; News Portal 1.0 documentation</title>
+    <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=5ecbeea2" />
+    <link rel="stylesheet" type="text/css" href="../../_static/basic.css?v=b08954a9" />
+    <link rel="stylesheet" type="text/css" href="../../_static/alabaster.css?v=27fed22d" />
+    <script src="../../_static/documentation_options.js?v=f2a433a1"></script>
+    <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" />
+   
+  <link rel="stylesheet" href="../../_static/custom.css" type="text/css" />
+  
+
+  
+  
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <h1>Source code for news_api.serializers</h1><div class="highlight"><pre>
+<span></span><span class="c1"># news_api/serializers.py</span>
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">Data serialization layer for the news ecosystem application.</span>
+
+<span class="sd">Transforms Django database model instances into portable JSON payloads </span>
+<span class="sd">and handles incoming validation schemas for REST API endpoints.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">rest_framework</span><span class="w"> </span><span class="kn">import</span> <span class="n">serializers</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">django.contrib.auth</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_user_model</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.models</span><span class="w"> </span><span class="kn">import</span> <span class="n">Publisher</span><span class="p">,</span> <span class="n">Article</span><span class="p">,</span> <span class="n">Newsletter</span>
+
+<span class="n">User</span> <span class="o">=</span> <span class="n">get_user_model</span><span class="p">()</span>
+
+<div class="viewcode-block" id="UserSerializer">
+<a class="viewcode-back" href="../../news_api.html#news_api.serializers.UserSerializer">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">UserSerializer</span><span class="p">(</span><span class="n">serializers</span><span class="o">.</span><span class="n">ModelSerializer</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Transforms custom user account profiles into secure external JSON structures.</span>
+
+<span class="sd">    Exposes base identity properties, designated system routing roles, and </span>
+<span class="sd">    associated follow/subscription matrices for client profiles.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+<div class="viewcode-block" id="UserSerializer.Meta">
+<a class="viewcode-back" href="../../news_api.html#news_api.serializers.UserSerializer.Meta">[docs]</a>
+    <span class="k">class</span><span class="w"> </span><span class="nc">Meta</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Maps user profile serialization options directly onto the system&#39;s active User model.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">model</span> <span class="o">=</span> <span class="n">User</span>
+        <span class="n">fields</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;id&#39;</span><span class="p">,</span> <span class="s1">&#39;username&#39;</span><span class="p">,</span> <span class="s1">&#39;email&#39;</span><span class="p">,</span> <span class="s1">&#39;role&#39;</span><span class="p">,</span> <span class="s1">&#39;subscribed_publishers&#39;</span><span class="p">,</span> <span class="s1">&#39;subscribed_journalists&#39;</span><span class="p">]</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="PublisherSerializer">
+<a class="viewcode-back" href="../../news_api.html#news_api.serializers.PublisherSerializer">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">PublisherSerializer</span><span class="p">(</span><span class="n">serializers</span><span class="o">.</span><span class="n">ModelSerializer</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Handles serialization and validation configurations for corporate Publisher entities.</span>
+
+<span class="sd">    Transforms tenant agency fields including administrative collections like associated </span>
+<span class="sd">    editors and journalists into readable arrays.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+<div class="viewcode-block" id="PublisherSerializer.Meta">
+<a class="viewcode-back" href="../../news_api.html#news_api.serializers.PublisherSerializer.Meta">[docs]</a>
+    <span class="k">class</span><span class="w"> </span><span class="nc">Meta</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Binds all database columns on the Publisher model to public API channels.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">model</span> <span class="o">=</span> <span class="n">Publisher</span>
+        <span class="n">fields</span> <span class="o">=</span> <span class="s1">&#39;__all__&#39;</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="ArticleSerializer">
+<a class="viewcode-back" href="../../news_api.html#news_api.serializers.ArticleSerializer">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">ArticleSerializer</span><span class="p">(</span><span class="n">serializers</span><span class="o">.</span><span class="n">ModelSerializer</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Manages structural data transformations and write restrictions for Article entries.</span>
+
+<span class="sd">    Provides readable author and publisher metadata using source lookups </span>
+<span class="sd">    while preserving strict access boundaries over administrative fields.</span>
+
+<span class="sd">    Attributes:</span>
+<span class="sd">        author_username (ReadOnlyField): Extracts and prints the author&#39;s display name string.</span>
+<span class="sd">        publisher_name (ReadOnlyField): Extracts and prints the parent organization&#39;s corporate title.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">author_username</span> <span class="o">=</span> <span class="n">serializers</span><span class="o">.</span><span class="n">ReadOnlyField</span><span class="p">(</span><span class="n">source</span><span class="o">=</span><span class="s1">&#39;author.username&#39;</span><span class="p">)</span>
+    <span class="n">publisher_name</span> <span class="o">=</span> <span class="n">serializers</span><span class="o">.</span><span class="n">ReadOnlyField</span><span class="p">(</span><span class="n">source</span><span class="o">=</span><span class="s1">&#39;publisher.name&#39;</span><span class="p">)</span>
+
+<div class="viewcode-block" id="ArticleSerializer.Meta">
+<a class="viewcode-back" href="../../news_api.html#news_api.serializers.ArticleSerializer.Meta">[docs]</a>
+    <span class="k">class</span><span class="w"> </span><span class="nc">Meta</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Defines fields, relationships, and unalterable administrative boundaries for article payloads.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">model</span> <span class="o">=</span> <span class="n">Article</span>
+        <span class="n">fields</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;id&#39;</span><span class="p">,</span> <span class="s1">&#39;title&#39;</span><span class="p">,</span> <span class="s1">&#39;body&#39;</span><span class="p">,</span> <span class="s1">&#39;is_approved&#39;</span><span class="p">,</span> <span class="s1">&#39;created_at&#39;</span><span class="p">,</span> <span class="s1">&#39;author&#39;</span><span class="p">,</span> <span class="s1">&#39;author_username&#39;</span><span class="p">,</span> <span class="s1">&#39;publisher&#39;</span><span class="p">,</span> <span class="s1">&#39;publisher_name&#39;</span><span class="p">]</span>
+        <span class="n">read_only_fields</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;is_approved&#39;</span><span class="p">,</span> <span class="s1">&#39;author&#39;</span><span class="p">]</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="NewsletterSerializer">
+<a class="viewcode-back" href="../../news_api.html#news_api.serializers.NewsletterSerializer">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">NewsletterSerializer</span><span class="p">(</span><span class="n">serializers</span><span class="o">.</span><span class="n">ModelSerializer</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Handles payload nesting and structure definitions for curated Newsletter digests.</span>
+
+<span class="sd">    Flattens related primary keys into explicit sub-objects to let client interfaces </span>
+<span class="sd">    render nested article text streams effortlessly.</span>
+
+<span class="sd">    Attributes:</span>
+<span class="sd">        articles_details (ArticleSerializer): Recursively loops and reads details for linked article rows.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">articles_details</span> <span class="o">=</span> <span class="n">ArticleSerializer</span><span class="p">(</span><span class="n">source</span><span class="o">=</span><span class="s1">&#39;articles&#39;</span><span class="p">,</span> <span class="n">many</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">read_only</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+<div class="viewcode-block" id="NewsletterSerializer.Meta">
+<a class="viewcode-back" href="../../news_api.html#news_api.serializers.NewsletterSerializer.Meta">[docs]</a>
+    <span class="k">class</span><span class="w"> </span><span class="nc">Meta</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Configures data serialization pipelines across periodic publication items.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">model</span> <span class="o">=</span> <span class="n">Newsletter</span>
+        <span class="n">fields</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;id&#39;</span><span class="p">,</span> <span class="s1">&#39;title&#39;</span><span class="p">,</span> <span class="s1">&#39;description&#39;</span><span class="p">,</span> <span class="s1">&#39;created_at&#39;</span><span class="p">,</span> <span class="s1">&#39;author&#39;</span><span class="p">,</span> <span class="s1">&#39;articles&#39;</span><span class="p">,</span> <span class="s1">&#39;articles_details&#39;</span><span class="p">]</span></div>
+</div>
+
+</pre></div>
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="Main">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="../../index.html">News Portal</a></h1>
+
+
+
+
+
+
+
+
+
+<search id="searchbox" style="display: none" role="search">
+    <div class="searchformwrapper">
+    <form class="search" action="../../search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="Search"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</search>
+<script>document.getElementById('searchbox').style.display = "block"</script><h3>Navigation</h3>
+<p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../modules.html">news-portal-app</a></li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="../../index.html">Documentation overview</a><ul>
+  <li><a href="../index.html">Module code</a><ul>
+  </ul></li>
+  </ul></li>
+</ul>
+</div>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &#169;2026, Khensani.
+      
+      |
+      Powered by <a href="https://www.sphinx-doc.org/">Sphinx 9.1.0</a>
+      &amp; <a href="https://alabaster.readthedocs.io">Alabaster 1.0.0</a>
+      
+    </div>
+
+    
+
+    
+  </body>
+</html>

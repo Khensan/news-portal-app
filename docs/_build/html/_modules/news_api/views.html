@@ -1,0 +1,1521 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>news_api.views &#8212; News Portal 1.0 documentation</title>
+    <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=5ecbeea2" />
+    <link rel="stylesheet" type="text/css" href="../../_static/basic.css?v=b08954a9" />
+    <link rel="stylesheet" type="text/css" href="../../_static/alabaster.css?v=27fed22d" />
+    <script src="../../_static/documentation_options.js?v=f2a433a1"></script>
+    <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" />
+   
+  <link rel="stylesheet" href="../../_static/custom.css" type="text/css" />
+  
+
+  
+  
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <h1>Source code for news_api.views</h1><div class="highlight"><pre>
+<span></span><span class="c1"># news_api/views.py</span>
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">Controller views managing core user interaction layers for the news portal ecosystem.</span>
+
+<span class="sd">Handles public reader-facing interfaces, custom dynamic registrations linking </span>
+<span class="sd">tenant publisher workspaces, and administrative assignment/offboarding views for staff.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">requests</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">django.db</span><span class="w"> </span><span class="kn">import</span> <span class="n">models</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">django.core.mail</span><span class="w"> </span><span class="kn">import</span> <span class="n">send_mail</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">django.shortcuts</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_object_or_404</span><span class="p">,</span> <span class="n">render</span><span class="p">,</span> <span class="n">redirect</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">django.contrib.auth.decorators</span><span class="w"> </span><span class="kn">import</span> <span class="n">login_required</span><span class="p">,</span> <span class="n">user_passes_test</span><span class="p">,</span> <span class="n">permission_required</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">django.contrib.auth</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_user_model</span><span class="p">,</span> <span class="n">login</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">django.http</span><span class="w"> </span><span class="kn">import</span> <span class="n">HttpResponseRedirect</span><span class="p">,</span> <span class="n">JsonResponse</span><span class="p">,</span> <span class="n">HttpResponse</span><span class="p">,</span> <span class="n">HttpResponseNotAllowed</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">django.urls</span><span class="w"> </span><span class="kn">import</span> <span class="n">reverse</span> <span class="k">as</span> <span class="n">django_reverse</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">django.views.decorators.http</span><span class="w"> </span><span class="kn">import</span> <span class="n">require_POST</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">django.views.generic</span><span class="w"> </span><span class="kn">import</span> <span class="n">DeleteView</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">django.urls</span><span class="w"> </span><span class="kn">import</span> <span class="n">reverse_lazy</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">django.utils.decorators</span><span class="w"> </span><span class="kn">import</span> <span class="n">method_decorator</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">django.views.decorators.csrf</span><span class="w"> </span><span class="kn">import</span> <span class="n">csrf_exempt</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">django.contrib.auth</span><span class="w"> </span><span class="kn">import</span> <span class="n">views</span> <span class="k">as</span> <span class="n">auth_views</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">django.middleware.csrf</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_token</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">django.contrib.auth.mixins</span><span class="w"> </span><span class="kn">import</span> <span class="n">UserPassesTestMixin</span>
+
+
+<span class="c1"># Django REST Framework Components</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">rest_framework</span><span class="w"> </span><span class="kn">import</span> <span class="n">views</span><span class="p">,</span> <span class="n">status</span><span class="p">,</span> <span class="n">generics</span><span class="p">,</span> <span class="n">permissions</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">rest_framework.response</span><span class="w"> </span><span class="kn">import</span> <span class="n">Response</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">rest_framework.views</span><span class="w"> </span><span class="kn">import</span> <span class="n">APIView</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">rest_framework.decorators</span><span class="w"> </span><span class="kn">import</span> <span class="n">api_view</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">rest_framework.reverse</span><span class="w"> </span><span class="kn">import</span> <span class="n">reverse</span> <span class="k">as</span> <span class="n">drf_reverse</span>  
+<span class="kn">from</span><span class="w"> </span><span class="nn">django.contrib.auth.mixins</span><span class="w"> </span><span class="kn">import</span> <span class="n">LoginRequiredMixin</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">django.contrib.auth.models</span><span class="w"> </span><span class="kn">import</span> <span class="n">Group</span><span class="p">,</span> <span class="n">Permission</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">django.contrib.contenttypes.models</span><span class="w"> </span><span class="kn">import</span> <span class="n">ContentType</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">django.db</span><span class="w"> </span><span class="kn">import</span> <span class="n">transaction</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.forms</span><span class="w"> </span><span class="kn">import</span> <span class="n">CustomUserRegistrationForm</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">django.http</span><span class="w"> </span><span class="kn">import</span> <span class="n">HttpResponse</span>
+
+
+
+<span class="c1"># App-Level Components</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.models</span><span class="w"> </span><span class="kn">import</span> <span class="n">Article</span><span class="p">,</span> <span class="n">Newsletter</span><span class="p">,</span> <span class="n">Publisher</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.serializers</span><span class="w"> </span><span class="kn">import</span> <span class="n">ArticleSerializer</span><span class="p">,</span> <span class="n">NewsletterSerializer</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.permissions</span><span class="w"> </span><span class="kn">import</span> <span class="n">IsJournalistUser</span><span class="p">,</span> <span class="n">IsEditorOrJournalistUser</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.forms</span><span class="w"> </span><span class="kn">import</span> <span class="n">CustomUserCreationForm</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">django.contrib.auth.mixins</span><span class="w"> </span><span class="kn">import</span> <span class="n">PermissionRequiredMixin</span>  
+<span class="kn">from</span><span class="w"> </span><span class="nn">django.views.generic</span><span class="w"> </span><span class="kn">import</span> <span class="n">CreateView</span><span class="p">,</span> <span class="n">UpdateView</span><span class="p">,</span> <span class="n">ListView</span><span class="p">,</span> <span class="n">DetailView</span> 
+<span class="kn">from</span><span class="w"> </span><span class="nn">.forms</span><span class="w"> </span><span class="kn">import</span> <span class="n">PublisherCreationForm</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">django.db</span><span class="w"> </span><span class="kn">import</span> <span class="n">models</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">rest_framework</span><span class="w"> </span><span class="kn">import</span> <span class="n">generics</span><span class="p">,</span> <span class="n">permissions</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.models</span><span class="w"> </span><span class="kn">import</span> <span class="n">Article</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.serializers</span><span class="w"> </span><span class="kn">import</span> <span class="n">ArticleSerializer</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.forms</span><span class="w"> </span><span class="kn">import</span> <span class="n">AdminPublisherInitializationForm</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.forms</span><span class="w"> </span><span class="kn">import</span> <span class="n">CustomUserCreationForm</span><span class="p">,</span> <span class="n">PublisherCreationForm</span><span class="p">,</span> <span class="n">ArticleModelForm</span>
+
+
+
+<span class="n">User</span> <span class="o">=</span> <span class="n">get_user_model</span><span class="p">()</span>
+
+<span class="c1"># ==========================================</span>
+<span class="c1"># PUBLIC READER-FACING TEMPLATE VIEWS</span>
+<span class="c1"># ==========================================</span>
+<div class="viewcode-block" id="is_platform_admin_check">
+<a class="viewcode-back" href="../../news_api.html#news_api.views.is_platform_admin_check">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">is_platform_admin_check</span><span class="p">(</span><span class="n">user</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Validates whether the authenticated user holds administrative platform capabilities.</span>
+
+<span class="sd">    Checks against a custom role attribute field string or dedicated flag </span>
+<span class="sd">    to isolate master setup screens from standard readers or journalists.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        user (CustomUser): Target system identity profile object instance under assessment.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        bool: True evaluation verification flags if explicit admin rights match.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Replace with your system&#39;s exact admin flag property mapping configuration rule</span>
+    <span class="c1"># Examples: getattr(user, &#39;is_admin&#39;, False) or user.role.lower() == &#39;admin&#39;</span>
+    <span class="k">return</span> <span class="n">user</span><span class="o">.</span><span class="n">is_authenticated</span> <span class="ow">and</span> <span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="n">user</span><span class="p">,</span> <span class="s1">&#39;role&#39;</span><span class="p">,</span> <span class="s1">&#39;reader&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="o">==</span> <span class="s1">&#39;admin&#39;</span> <span class="ow">or</span> <span class="n">user</span><span class="o">.</span><span class="n">is_staff</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="admin_initialize_publisher_view">
+<a class="viewcode-back" href="../../news_api.html#news_api.views.admin_initialize_publisher_view">[docs]</a>
+<span class="nd">@user_passes_test</span><span class="p">(</span><span class="n">is_platform_admin_check</span><span class="p">)</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">admin_initialize_publisher_view</span><span class="p">(</span><span class="n">request</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Initializes a Publisher independently from an Editor workspace session context.</span>
+
+<span class="sd">    Saves the corporate profile record atomically and loops over the explicit </span>
+<span class="sd">    form arrays to assign designated editors and journalists to the organization.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        request (HttpRequest): System container mapping context variables, profile roles, </span>
+<span class="sd">            and POST multi-attribute form data packages.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        HttpResponse: A redirected target loop routing back to the live landing directory, </span>
+<span class="sd">            or a rendered tabular entry form screen.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">request</span><span class="o">.</span><span class="n">method</span> <span class="o">==</span> <span class="s1">&#39;POST&#39;</span><span class="p">:</span>
+        <span class="n">form</span> <span class="o">=</span> <span class="n">AdminPublisherInitializationForm</span><span class="p">(</span><span class="n">request</span><span class="o">.</span><span class="n">POST</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">form</span><span class="o">.</span><span class="n">is_valid</span><span class="p">():</span>
+            <span class="c1"># Wrap mutations inside an atomic block to protect multi-table data matrices</span>
+            <span class="k">with</span> <span class="n">transaction</span><span class="o">.</span><span class="n">atomic</span><span class="p">():</span>
+                <span class="c1"># 1. Establish the standalone publisher brand model row down to storage</span>
+                <span class="n">publisher</span> <span class="o">=</span> <span class="n">form</span><span class="o">.</span><span class="n">save</span><span class="p">()</span>
+                
+                <span class="c1"># 2. Extract and assign chosen Editor accounts cleanly</span>
+                <span class="n">selected_editors</span> <span class="o">=</span> <span class="n">form</span><span class="o">.</span><span class="n">cleaned_data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;assign_editors&#39;</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">selected_editors</span><span class="p">:</span>
+                    <span class="n">publisher</span><span class="o">.</span><span class="n">editors</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="o">*</span><span class="n">selected_editors</span><span class="p">)</span>
+                    
+                <span class="c1"># 3. Extract and assign chosen Staff Journalist accounts cleanly</span>
+                <span class="n">selected_journalists</span> <span class="o">=</span> <span class="n">form</span><span class="o">.</span><span class="n">cleaned_data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;assign_journalists&#39;</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">selected_journalists</span><span class="p">:</span>
+                    <span class="n">publisher</span><span class="o">.</span><span class="n">journalists</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="o">*</span><span class="n">selected_journalists</span><span class="p">)</span>
+                    
+                <span class="c1"># Persist modifications explicitly down to database storage tables</span>
+                <span class="n">publisher</span><span class="o">.</span><span class="n">save</span><span class="p">()</span>
+                
+            <span class="k">return</span> <span class="n">redirect</span><span class="p">(</span><span class="s1">&#39;news_api:article_list&#39;</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">form</span> <span class="o">=</span> <span class="n">AdminPublisherInitializationForm</span><span class="p">()</span>
+        
+    <span class="k">return</span> <span class="n">render</span><span class="p">(</span><span class="n">request</span><span class="p">,</span> <span class="s1">&#39;news_api/admin_init_publisher.html&#39;</span><span class="p">,</span> <span class="p">{</span><span class="s1">&#39;form&#39;</span><span class="p">:</span> <span class="n">form</span><span class="p">})</span></div>
+
+
+
+<div class="viewcode-block" id="article_list">
+<a class="viewcode-back" href="../../news_api.html#news_api.views.article_list">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">article_list</span><span class="p">(</span><span class="n">request</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Renders the public homepage view displaying all approved articles.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        request (HttpRequest): Core incoming transactional payload request object.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        HttpResponse: Rendered homepage structural template populated with approved content items.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">articles</span> <span class="o">=</span> <span class="n">Article</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">approved</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">order_by</span><span class="p">(</span><span class="s1">&#39;-created_at&#39;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">render</span><span class="p">(</span><span class="n">request</span><span class="p">,</span> <span class="s1">&#39;news_api/home.html&#39;</span><span class="p">,</span> <span class="p">{</span><span class="s1">&#39;articles&#39;</span><span class="p">:</span> <span class="n">articles</span><span class="p">})</span></div>
+
+
+
+<div class="viewcode-block" id="article_detail">
+<a class="viewcode-back" href="../../news_api.html#news_api.views.article_detail">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">article_detail</span><span class="p">(</span><span class="n">request</span><span class="p">,</span> <span class="n">pk</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Renders an individual approved article detail layout view for public readers.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        request (HttpRequest): Core incoming transactional payload request object.</span>
+<span class="sd">        pk (int): Primary key identifier targeting a distinct database table article entry row.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        HttpResponse: Rendered narrative layout context view mapping the selected story.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">article</span> <span class="o">=</span> <span class="n">get_object_or_404</span><span class="p">(</span><span class="n">Article</span><span class="p">,</span> <span class="n">pk</span><span class="o">=</span><span class="n">pk</span><span class="p">,</span> <span class="n">approved</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">render</span><span class="p">(</span><span class="n">request</span><span class="p">,</span> <span class="s1">&#39;news_api/article_detail.html&#39;</span><span class="p">,</span> <span class="p">{</span><span class="s1">&#39;article&#39;</span><span class="p">:</span> <span class="n">article</span><span class="p">})</span></div>
+
+
+
+<div class="viewcode-block" id="newsletter_list">
+<a class="viewcode-back" href="../../news_api.html#news_api.views.newsletter_list">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">newsletter_list</span><span class="p">(</span><span class="n">request</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Renders the newsletter archive platform index page.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        request (HttpRequest): Core incoming transactional payload request object.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        HttpResponse: Rendered view housing the complete historical collection of dispatched digests.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">newsletters_queryset</span> <span class="o">=</span> <span class="n">Newsletter</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">all</span><span class="p">()</span><span class="o">.</span><span class="n">order_by</span><span class="p">(</span><span class="s1">&#39;-created_at&#39;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">render</span><span class="p">(</span><span class="n">request</span><span class="p">,</span> <span class="s1">&#39;news_api/newsletter_list.html&#39;</span><span class="p">,</span> <span class="p">{</span><span class="s1">&#39;newsletters&#39;</span><span class="p">:</span> <span class="n">newsletters_queryset</span><span class="p">})</span></div>
+
+
+
+<div class="viewcode-block" id="register_view">
+<a class="viewcode-back" href="../../news_api.html#news_api.views.register_view">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">register_view</span><span class="p">(</span><span class="n">request</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Handles joint user registration and automated publisher profile provisioning.</span>
+
+<span class="sd">    Processes incoming credentials. If a profile signs up under an organizational tier </span>
+<span class="sd">    and provides a brand title, an isolated Publisher row is generated atomically.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        request (HttpRequest): Core incoming frame holding form parameters and session context.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        HttpResponse: A redirected routing instruction targeting the role dashboard, </span>
+<span class="sd">            or a re-rendered registration form block containing field error diagnostics.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">request</span><span class="o">.</span><span class="n">method</span> <span class="o">==</span> <span class="s1">&#39;POST&#39;</span><span class="p">:</span>
+        <span class="n">form</span> <span class="o">=</span> <span class="n">CustomUserRegistrationForm</span><span class="p">(</span><span class="n">request</span><span class="o">.</span><span class="n">POST</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">form</span><span class="o">.</span><span class="n">is_valid</span><span class="p">():</span>
+            <span class="k">with</span> <span class="n">transaction</span><span class="o">.</span><span class="n">atomic</span><span class="p">():</span>
+                <span class="c1"># 1. Commit the core user account row first</span>
+                <span class="n">user</span> <span class="o">=</span> <span class="n">form</span><span class="o">.</span><span class="n">save</span><span class="p">()</span>
+                <span class="n">role</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">user</span><span class="p">,</span> <span class="s1">&#39;role&#39;</span><span class="p">,</span> <span class="s1">&#39;reader&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
+                <span class="n">pub_name</span> <span class="o">=</span> <span class="n">form</span><span class="o">.</span><span class="n">cleaned_data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;new_publisher_name&#39;</span><span class="p">,</span> <span class="s1">&#39;&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
+
+                <span class="c1"># --- ATOMIC WORKSPACE PROVISIONING ---</span>
+                <span class="c1"># Check for BOTH the role flag and an explicit text input entry string</span>
+                <span class="k">if</span> <span class="p">(</span><span class="n">role</span> <span class="o">==</span> <span class="s1">&#39;publisher&#39;</span> <span class="ow">or</span> <span class="n">role</span> <span class="o">==</span> <span class="s1">&#39;editor&#39;</span><span class="p">)</span> <span class="ow">and</span> <span class="n">pub_name</span><span class="p">:</span>
+                    <span class="n">publisher</span> <span class="o">=</span> <span class="n">Publisher</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">create</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="n">pub_name</span><span class="p">)</span>
+                    <span class="c1"># Automatically link the creating profile user into the management list</span>
+                    <span class="n">publisher</span><span class="o">.</span><span class="n">editors</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">user</span><span class="p">)</span>
+                    <span class="n">publisher</span><span class="o">.</span><span class="n">save</span><span class="p">()</span>
+                
+                <span class="c1"># --- PROCESS SECURITY GROUP SCHEMAS ---</span>
+                <span class="k">if</span> <span class="n">role</span> <span class="o">==</span> <span class="s1">&#39;journalist&#39;</span><span class="p">:</span>
+                    <span class="n">group</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">Group</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">get_or_create</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s1">&#39;Journalists&#39;</span><span class="p">)</span>
+                    <span class="n">content_type</span> <span class="o">=</span> <span class="n">ContentType</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">get_for_model</span><span class="p">(</span><span class="n">Article</span><span class="p">)</span>
+                    <span class="k">try</span><span class="p">:</span>
+                        <span class="n">add_perm</span> <span class="o">=</span> <span class="n">Permission</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">codename</span><span class="o">=</span><span class="s1">&#39;add_article&#39;</span><span class="p">,</span> <span class="n">content_type</span><span class="o">=</span><span class="n">content_type</span><span class="p">)</span>
+                        <span class="n">group</span><span class="o">.</span><span class="n">permissions</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">add_perm</span><span class="p">)</span>
+                    <span class="k">except</span> <span class="n">Permission</span><span class="o">.</span><span class="n">DoesNotExist</span><span class="p">:</span>
+                        <span class="k">pass</span>
+                    <span class="n">user</span><span class="o">.</span><span class="n">groups</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">group</span><span class="p">)</span>
+                    
+                <span class="k">elif</span> <span class="n">role</span> <span class="o">==</span> <span class="s1">&#39;reader&#39;</span><span class="p">:</span>
+                    <span class="n">group</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">Group</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">get_or_create</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s1">&#39;Readers&#39;</span><span class="p">)</span>
+                    <span class="n">article_ct</span> <span class="o">=</span> <span class="n">ContentType</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">get_for_model</span><span class="p">(</span><span class="n">Article</span><span class="p">)</span>
+                    <span class="n">newsletter_ct</span> <span class="o">=</span> <span class="n">ContentType</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">get_for_model</span><span class="p">(</span><span class="n">Newsletter</span><span class="p">)</span>
+                    
+                    <span class="k">try</span><span class="p">:</span>
+                        <span class="n">view_art</span> <span class="o">=</span> <span class="n">Permission</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">codename</span><span class="o">=</span><span class="s1">&#39;view_article&#39;</span><span class="p">,</span> <span class="n">content_type</span><span class="o">=</span><span class="n">article_ct</span><span class="p">)</span>
+                        <span class="n">group</span><span class="o">.</span><span class="n">permissions</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">view_art</span><span class="p">)</span>
+                        <span class="n">view_news</span> <span class="o">=</span> <span class="n">Permission</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">codename</span><span class="o">=</span><span class="s1">&#39;view_newsletter&#39;</span><span class="p">,</span> <span class="n">content_type</span><span class="o">=</span><span class="n">newsletter_ct</span><span class="p">)</span>
+                        <span class="n">group</span><span class="o">.</span><span class="n">permissions</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">view_news</span><span class="p">)</span>
+                    <span class="k">except</span> <span class="n">Permission</span><span class="o">.</span><span class="n">DoesNotExist</span><span class="p">:</span>
+                        <span class="k">pass</span>
+                    
+                    <span class="n">user</span><span class="o">.</span><span class="n">groups</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">group</span><span class="p">)</span>
+            
+            <span class="c1"># Establish live system authentication loops smoothly</span>
+            <span class="n">login</span><span class="p">(</span><span class="n">request</span><span class="p">,</span> <span class="n">user</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">redirect</span><span class="p">(</span><span class="s1">&#39;news_api:dashboard_redirect&#39;</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">form</span> <span class="o">=</span> <span class="n">CustomUserRegistrationForm</span><span class="p">()</span>
+        
+    <span class="k">return</span> <span class="n">render</span><span class="p">(</span><span class="n">request</span><span class="p">,</span> <span class="s1">&#39;news_api/register.html&#39;</span><span class="p">,</span> <span class="p">{</span><span class="s1">&#39;form&#39;</span><span class="p">:</span> <span class="n">form</span><span class="p">})</span></div>
+
+
+
+<span class="c1"># ==========================================</span>
+<span class="c1"># STAFF WORKSPACE CONTROL VIEWS</span>
+<span class="c1"># ==========================================</span>
+
+<div class="viewcode-block" id="assign_staff_view">
+<a class="viewcode-back" href="../../news_api.html#news_api.views.assign_staff_view">[docs]</a>
+<span class="nd">@login_required</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">assign_staff_view</span><span class="p">(</span><span class="n">request</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Manages workspace staff rosters for a logged-in Editor&#39;s Publisher organization.</span>
+
+<span class="sd">    Processes incoming transactional instructions to add new personnel (Editors or Journalists) </span>
+<span class="sd">    to the publication network, offboard existing active staff entries smoothly, and extract </span>
+<span class="sd">    available unassigned pools.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        request (HttpRequest): Core framework context capturing HTTP environment values, session </span>
+<span class="sd">            state lookups, and multi-attribute dictionary transaction properties.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        HttpResponse: A redirected loop instruction routing to the team status view pane, or </span>
+<span class="sd">            a rendered control screen summarizing active team rosters.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Locate the target corporate organization profile where the active editor holds administrative status</span>
+    <span class="n">user_publisher</span> <span class="o">=</span> <span class="n">Publisher</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">editors</span><span class="o">=</span><span class="n">request</span><span class="o">.</span><span class="n">user</span><span class="p">)</span><span class="o">.</span><span class="n">first</span><span class="p">()</span>
+    
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">user_publisher</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">render</span><span class="p">(</span><span class="n">request</span><span class="p">,</span> <span class="s1">&#39;news_api/error.html&#39;</span><span class="p">,</span> <span class="p">{</span><span class="s1">&#39;message&#39;</span><span class="p">:</span> <span class="s2">&quot;You are not assigned to a valid publisher workspace.&quot;</span><span class="p">})</span>
+
+    <span class="k">if</span> <span class="n">request</span><span class="o">.</span><span class="n">method</span> <span class="o">==</span> <span class="s1">&#39;POST&#39;</span><span class="p">:</span>
+        <span class="n">action_type</span> <span class="o">=</span> <span class="n">request</span><span class="o">.</span><span class="n">POST</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;action_type&#39;</span><span class="p">,</span> <span class="s1">&#39;assign&#39;</span><span class="p">)</span>  <span class="c1"># Values: &#39;assign&#39; or &#39;remove&#39;</span>
+        <span class="n">target_user_id</span> <span class="o">=</span> <span class="n">request</span><span class="o">.</span><span class="n">POST</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;user_id&#39;</span><span class="p">)</span>
+        
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">staff_member</span> <span class="o">=</span> <span class="n">User</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="nb">id</span><span class="o">=</span><span class="n">target_user_id</span><span class="p">)</span>
+            
+            <span class="c1"># --- PROCESS STAFF ROLE WORKFORCE INGESTION ---</span>
+            <span class="k">if</span> <span class="n">action_type</span> <span class="o">==</span> <span class="s1">&#39;assign&#39;</span><span class="p">:</span>
+                <span class="n">action_role</span> <span class="o">=</span> <span class="n">request</span><span class="o">.</span><span class="n">POST</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;assign_as&#39;</span><span class="p">)</span>  <span class="c1"># Values: &#39;editor&#39; or &#39;journalist&#39;</span>
+                
+                <span class="k">if</span> <span class="n">action_role</span> <span class="o">==</span> <span class="s1">&#39;editor&#39;</span><span class="p">:</span>
+                    <span class="n">staff_member</span><span class="o">.</span><span class="n">role</span> <span class="o">=</span> <span class="s1">&#39;editor&#39;</span>
+                    <span class="n">staff_member</span><span class="o">.</span><span class="n">save</span><span class="p">()</span>
+                    <span class="n">user_publisher</span><span class="o">.</span><span class="n">editors</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">staff_member</span><span class="p">)</span>
+                    
+                <span class="k">elif</span> <span class="n">action_role</span> <span class="o">==</span> <span class="s1">&#39;journalist&#39;</span><span class="p">:</span>
+                    <span class="n">staff_member</span><span class="o">.</span><span class="n">role</span> <span class="o">=</span> <span class="s1">&#39;journalist&#39;</span>
+                    <span class="n">staff_member</span><span class="o">.</span><span class="n">save</span><span class="p">()</span>
+                    <span class="n">user_publisher</span><span class="o">.</span><span class="n">journalists</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">staff_member</span><span class="p">)</span>
+            
+            <span class="c1"># --- PROCESS STAFF REMOVAL / RETIREMENT LOOP ---</span>
+            <span class="k">elif</span> <span class="n">action_type</span> <span class="o">==</span> <span class="s1">&#39;remove&#39;</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">user_publisher</span><span class="o">.</span><span class="n">editors</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="nb">id</span><span class="o">=</span><span class="n">staff_member</span><span class="o">.</span><span class="n">id</span><span class="p">)</span><span class="o">.</span><span class="n">exists</span><span class="p">():</span>
+                    <span class="n">user_publisher</span><span class="o">.</span><span class="n">editors</span><span class="o">.</span><span class="n">remove</span><span class="p">(</span><span class="n">staff_member</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">user_publisher</span><span class="o">.</span><span class="n">journalists</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="nb">id</span><span class="o">=</span><span class="n">staff_member</span><span class="o">.</span><span class="n">id</span><span class="p">)</span><span class="o">.</span><span class="n">exists</span><span class="p">():</span>
+                    <span class="n">user_publisher</span><span class="o">.</span><span class="n">journalists</span><span class="o">.</span><span class="n">remove</span><span class="p">(</span><span class="n">staff_member</span><span class="p">)</span>
+                
+                <span class="c1"># Gracefully reset the unlinked staff asset back into a standard base reader layout</span>
+                <span class="n">staff_member</span><span class="o">.</span><span class="n">role</span> <span class="o">=</span> <span class="s1">&#39;reader&#39;</span>
+                <span class="n">staff_member</span><span class="o">.</span><span class="n">save</span><span class="p">()</span>
+                
+            <span class="n">user_publisher</span><span class="o">.</span><span class="n">save</span><span class="p">()</span>
+            <span class="k">return</span> <span class="n">redirect</span><span class="p">(</span><span class="s1">&#39;news_api:manage_team&#39;</span><span class="p">)</span>
+            
+        <span class="k">except</span> <span class="n">User</span><span class="o">.</span><span class="n">DoesNotExist</span><span class="p">:</span>
+            <span class="k">pass</span>
+
+    <span class="c1"># Extract clean profiles eligible to join a workspace, excluding active competitors or pre-assigned managers</span>
+    <span class="n">unassigned_users</span> <span class="o">=</span> <span class="n">User</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">exclude</span><span class="p">(</span>
+        <span class="n">publisher_editors</span><span class="o">=</span><span class="n">user_publisher</span>
+    <span class="p">)</span><span class="o">.</span><span class="n">exclude</span><span class="p">(</span>
+        <span class="n">publisher_journalists</span><span class="o">=</span><span class="n">user_publisher</span>
+    <span class="p">)</span><span class="o">.</span><span class="n">exclude</span><span class="p">(</span>
+        <span class="n">role__iexact</span><span class="o">=</span><span class="s1">&#39;editor&#39;</span>
+    <span class="p">)</span>
+    
+    <span class="n">context</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s1">&#39;publisher&#39;</span><span class="p">:</span> <span class="n">user_publisher</span><span class="p">,</span>
+        <span class="s1">&#39;current_editors&#39;</span><span class="p">:</span> <span class="n">user_publisher</span><span class="o">.</span><span class="n">editors</span><span class="o">.</span><span class="n">all</span><span class="p">(),</span>
+        <span class="s1">&#39;current_journalists&#39;</span><span class="p">:</span> <span class="n">user_publisher</span><span class="o">.</span><span class="n">journalists</span><span class="o">.</span><span class="n">all</span><span class="p">(),</span>
+        <span class="s1">&#39;available_users&#39;</span><span class="p">:</span> <span class="n">unassigned_users</span>
+    <span class="p">}</span>
+    <span class="k">return</span> <span class="n">render</span><span class="p">(</span><span class="n">request</span><span class="p">,</span> <span class="s1">&#39;news_api/manage_team.html&#39;</span><span class="p">,</span> <span class="n">context</span><span class="p">)</span></div>
+
+
+<span class="c1"># news_api/views.py</span>
+
+<span class="c1"># news_api/views.py</span>
+
+<div class="viewcode-block" id="dashboard_redirect_view">
+<a class="viewcode-back" href="../../news_api.html#news_api.views.dashboard_redirect_view">[docs]</a>
+<span class="nd">@login_required</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">dashboard_redirect_view</span><span class="p">(</span><span class="n">request</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Evaluates an authenticated user profile&#39;s designation and routes them to their portal interface.</span>
+
+<span class="sd">    CRITICAL FIX: Strips out hard-cached browser next redirects and forces </span>
+<span class="sd">    the active Publisher role completely away from the editor gate line.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        request (HttpRequest): Session matrix transaction containing user profile details.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        HttpResponseRedirect: Dynamic path instruction mapping to an administrative, writer, or subscriber route.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Force a fresh evaluation of the user role string values</span>
+    <span class="n">role</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">request</span><span class="o">.</span><span class="n">user</span><span class="p">,</span> <span class="s1">&#39;role&#39;</span><span class="p">,</span> <span class="s1">&#39;reader&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
+    
+    <span class="k">if</span> <span class="n">role</span> <span class="o">==</span> <span class="s1">&#39;publisher&#39;</span><span class="p">:</span>
+        <span class="c1"># Safely direct publishers straight to their own independent dash room panel view</span>
+        <span class="k">return</span> <span class="n">redirect</span><span class="p">(</span><span class="s1">&#39;news_api:publisher_dashboard&#39;</span><span class="p">)</span>
+    <span class="k">elif</span> <span class="n">role</span> <span class="o">==</span> <span class="s1">&#39;editor&#39;</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">redirect</span><span class="p">(</span><span class="s1">&#39;news_api:editorial_dashboard&#39;</span><span class="p">)</span>
+    <span class="k">elif</span> <span class="n">role</span> <span class="o">==</span> <span class="s1">&#39;journalist&#39;</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">redirect</span><span class="p">(</span><span class="s1">&#39;news_api:journalist_dashboard&#39;</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">redirect</span><span class="p">(</span><span class="s1">&#39;news_api:reader_dashboard&#39;</span><span class="p">)</span></div>
+
+
+
+    
+<div class="viewcode-block" id="is_journalist_check">
+<a class="viewcode-back" href="../../news_api.html#news_api.views.is_journalist_check">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">is_journalist_check</span><span class="p">(</span><span class="n">user</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Validates whether the incoming user context matches a valid active Journalist profile.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        user (CustomUser): Target system identity profile object instance under assessment.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        bool: True evaluation verification flags if explicit journalist roles match.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">user</span><span class="o">.</span><span class="n">is_authenticated</span> <span class="ow">and</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">user</span><span class="p">,</span> <span class="s1">&#39;role&#39;</span><span class="p">,</span> <span class="s1">&#39;reader&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="o">==</span> <span class="s1">&#39;journalist&#39;</span></div>
+
+
+
+<div class="viewcode-block" id="is_editor_check">
+<a class="viewcode-back" href="../../news_api.html#news_api.views.is_editor_check">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">is_editor_check</span><span class="p">(</span><span class="n">user</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Validates whether the user is strictly an Editor.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">user</span><span class="o">.</span><span class="n">is_authenticated</span> <span class="ow">and</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">user</span><span class="p">,</span> <span class="s1">&#39;role&#39;</span><span class="p">,</span> <span class="s1">&#39;reader&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="o">==</span> <span class="s1">&#39;editor&#39;</span></div>
+
+
+
+<div class="viewcode-block" id="is_publisher_check">
+<a class="viewcode-back" href="../../news_api.html#news_api.views.is_publisher_check">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">is_publisher_check</span><span class="p">(</span><span class="n">user</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Validates whether the user is strictly a Publisher account role.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># &#39;publisher&#39; role pass this check, clearing any security redirects.</span>
+    <span class="k">return</span> <span class="n">user</span><span class="o">.</span><span class="n">is_authenticated</span> <span class="ow">and</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">user</span><span class="p">,</span> <span class="s1">&#39;role&#39;</span><span class="p">,</span> <span class="s1">&#39;reader&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="o">==</span> <span class="s1">&#39;publisher&#39;</span></div>
+
+
+
+<div class="viewcode-block" id="publisher_dashboard_view">
+<a class="viewcode-back" href="../../news_api.html#news_api.views.publisher_dashboard_view">[docs]</a>
+<span class="nd">@login_required</span>
+<span class="nd">@user_passes_test</span><span class="p">(</span><span class="n">is_publisher_check</span><span class="p">)</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">publisher_dashboard_view</span><span class="p">(</span><span class="n">request</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Renders a premium administrative control console for the Publisher role.</span>
+
+<span class="sd">    Tracks workforce statistics and content moderation metrics in a polished dashboard,</span>
+<span class="sd">    ensuring a pure server-side implementation free of client-side script overhead.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        request (HttpRequest): Session matrix tracking authenticated publisher context.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        HttpResponse: Clean HTML string payload containing the polished workspace console.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">csrf_token</span> <span class="o">=</span> <span class="n">get_token</span><span class="p">(</span><span class="n">request</span><span class="p">)</span>
+    
+    <span class="c1"># Extract the publisher organization where this user account is a listed manager</span>
+    <span class="n">user_publisher</span> <span class="o">=</span> <span class="n">Publisher</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">editors</span><span class="o">=</span><span class="n">request</span><span class="o">.</span><span class="n">user</span><span class="p">)</span><span class="o">.</span><span class="n">first</span><span class="p">()</span>
+
+    <span class="k">if</span> <span class="n">user_publisher</span><span class="p">:</span>
+        <span class="n">editors_count</span> <span class="o">=</span> <span class="n">user_publisher</span><span class="o">.</span><span class="n">editors</span><span class="o">.</span><span class="n">count</span><span class="p">()</span>
+        <span class="n">journalists_count</span> <span class="o">=</span> <span class="n">user_publisher</span><span class="o">.</span><span class="n">journalists</span><span class="o">.</span><span class="n">count</span><span class="p">()</span>
+        
+        <span class="c1"># Calculate content metrics specific to this publisher&#39;s workspace</span>
+        <span class="n">pending_count</span> <span class="o">=</span> <span class="n">Article</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">publisher</span><span class="o">=</span><span class="n">user_publisher</span><span class="p">,</span> <span class="n">approved</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span><span class="o">.</span><span class="n">count</span><span class="p">()</span>
+        <span class="n">approved_count</span> <span class="o">=</span> <span class="n">Article</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">publisher</span><span class="o">=</span><span class="n">user_publisher</span><span class="p">,</span> <span class="n">approved</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">count</span><span class="p">()</span>
+        
+        <span class="c1"># COMPREHENSIVE RESTORATION: Every multi-tenant panel operation card is fully mapped here</span>
+        <span class="n">publisher_html_content</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;&quot;&quot;</span>
+<span class="s2">        &lt;div class=&quot;panel-header&quot;&gt;</span>
+<span class="s2">            </span>
+<span class="s2">                &lt;span class=&quot;brand-icon&quot;&gt;🏢&lt;/span&gt;</span>
+<span class="s2">                &lt;div&gt;</span>
+<span class="s2">                    &lt;h3&gt;</span><span class="si">{</span><span class="n">user_publisher</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">&lt;/h3&gt;</span>
+<span class="s2">                    &lt;p&gt;Master Workspace Agency Portal&lt;/p&gt;</span>
+<span class="s2">                &lt;/div&gt;</span>
+<span class="s2">            &lt;/div&gt;</span>
+<span class="s2">            &lt;span class=&quot;badge badge-active&quot;&gt;Active Operation&lt;/span&gt;</span>
+<span class="s2">        &lt;/div&gt;</span>
+<span class="s2">        </span>
+<span class="s2">        &lt;p class=&quot;panel-description&quot;&gt;</span>
+<span class="s2">            You are authenticated as the &lt;strong&gt;Master Managing Publisher&lt;/strong&gt;. Use this secure control panel </span>
+<span class="s2">            to organize content moderation rules, analyze data streams, and onboard media staff.</span>
+<span class="s2">        &lt;/p&gt;</span>
+<span class="s2">        </span>
+<span class="s2">        &lt;div class=&quot;grid-metrics&quot;&gt;</span>
+<span class="s2">            &lt;div class=&quot;metric-card card-editors&quot;&gt;</span>
+<span class="s2">                &lt;div class=&quot;metric-title&quot;&gt;Linked Editors&lt;/div&gt;</span>
+<span class="s2">                &lt;div class=&quot;metric-num&quot;&gt;</span><span class="si">{</span><span class="n">editors_count</span><span class="si">}</span><span class="s2">&lt;/div&gt;</span>
+<span class="s2">                &lt;div class=&quot;metric-sub&quot;&gt;Roster managers assigned&lt;/div&gt;</span>
+<span class="s2">            &lt;/div&gt;</span>
+<span class="s2">            &lt;div class=&quot;metric-card card-journalists&quot;&gt;</span>
+<span class="s2">                &lt;div class=&quot;metric-title&quot;&gt;Staff Writers&lt;/div&gt;</span>
+<span class="s2">                &lt;div class=&quot;metric-num&quot;&gt;</span><span class="si">{</span><span class="n">journalists_count</span><span class="si">}</span><span class="s2">&lt;/div&gt;</span>
+<span class="s2">                &lt;div class=&quot;metric-sub&quot;&gt;Active platform journalists&lt;/div&gt;</span>
+<span class="s2">            &lt;/div&gt;</span>
+<span class="s2">            &lt;div class=&quot;metric-card card-pending&quot;&gt;</span>
+<span class="s2">                &lt;div class=&quot;metric-title&quot;&gt;Pending Moderation&lt;/div&gt;</span>
+<span class="s2">                &lt;div class=&quot;metric-num&quot;&gt;</span><span class="si">{</span><span class="n">pending_count</span><span class="si">}</span><span class="s2">&lt;/div&gt;</span>
+<span class="s2">                &lt;div class=&quot;metric-sub&quot;&gt;Drafts awaiting approval&lt;/div&gt;</span>
+<span class="s2">            &lt;/div&gt;</span>
+<span class="s2">            &lt;div class=&quot;metric-card card-approved&quot;&gt;</span>
+<span class="s2">                &lt;div class=&quot;metric-title&quot;&gt;Live Publications&lt;/div&gt;</span>
+<span class="s2">                &lt;div class=&quot;metric-num&quot;&gt;</span><span class="si">{</span><span class="n">approved_count</span><span class="si">}</span><span class="s2">&lt;/div&gt;</span>
+<span class="s2">                &lt;div class=&quot;metric-sub&quot;&gt;Global broadcast feeds&lt;/div&gt;</span>
+<span class="s2">            &lt;/div&gt;</span>
+<span class="s2">        &lt;/div&gt;</span>
+<span class="s2">        </span>
+<span class="s2">        &lt;div class=&quot;action-footer&quot;&gt;</span>
+<span class="s2">            &lt;a href=&quot;</span><span class="si">{</span><span class="n">django_reverse</span><span class="p">(</span><span class="s1">&#39;news_api:manage_team&#39;</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot; class=&quot;btn-primary&quot;&gt;</span>
+<span class="s2">                Configure Staff &amp; Onboard Writers &lt;span style=&quot;margin-left: 8px;&quot;&gt;→&lt;/span&gt;</span>
+<span class="s2">            &lt;/a&gt;</span>
+<span class="s2">        &lt;/div&gt;</span>
+<span class="s2">        &quot;&quot;&quot;</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="c1"># Fallback setup interface if an identity row doesn&#39;t match yet</span>
+        <span class="n">publisher_html_content</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;&quot;&quot;</span>
+<span class="s2">        &lt;div class=&quot;panel-header&quot;&gt;</span>
+<span class="s2">            </span>
+<span class="s2">                &lt;span class=&quot;brand-icon&quot; style=&quot;background: var(--warning-light); color: var(--warning);&quot;&gt;⚠️&lt;/span&gt;</span>
+<span class="s2">                &lt;div&gt;</span>
+<span class="s2">                    &lt;h3&gt;Organization Setup Required&lt;/h3&gt;</span>
+<span class="s2">                    &lt;p&gt;Tenant Configuration Pending&lt;/p&gt;</span>
+<span class="s2">                &lt;/div&gt;</span>
+<span class="s2">            &lt;/div&gt;</span>
+<span class="s2">        &lt;/div&gt;</span>
+<span class="s2">        &lt;p class=&quot;panel-description&quot; style=&quot;margin-bottom: 30px;&quot;&gt;</span>
+<span class="s2">            Your account role is fully authenticated as a Publisher, but you have not established your </span>
+<span class="s2">            corporate media network footprint yet. Initialize your standalone publisher row to activate your system features.</span>
+<span class="s2">        &lt;/p&gt;</span>
+<span class="s2">        &lt;div style=&quot;text-align: center;&quot;&gt;</span>
+<span class="s2">            &lt;a href=&quot;</span><span class="si">{</span><span class="n">django_reverse</span><span class="p">(</span><span class="s1">&#39;news_api:create_publisher_standalone&#39;</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot; class=&quot;btn-primary&quot; style=&quot;background: var(--warning); display: inline-block; width: auto; padding: 14px 35px;&quot;&gt;</span>
+<span class="s2">                Initialize Corporate Brand Workspace</span>
+<span class="s2">            &lt;/a&gt;</span>
+<span class="s2">        &lt;/div&gt;</span>
+<span class="s2">        &quot;&quot;&quot;</span>
+    <span class="c1"># news_api/views.py (Inside your publisher_dashboard_view function string)</span>
+    
+    <span class="c1"># Generate the Premium Master Layout Screen String Injection</span>
+    <span class="n">html_layout</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;&quot;&quot;</span>
+<span class="s2">    &lt;!DOCTYPE html&gt;</span>
+<span class="s2">    &lt;html lang=&quot;en&quot;&gt;</span>
+<span class="s2">    &lt;head&gt;</span>
+<span class="s2">        &lt;meta charset=&quot;UTF-8&quot;&gt;</span>
+<span class="s2">        &lt;meta name=&quot;viewport&quot; content=&quot;width=device-width, initial-scale=1.0&quot;&gt;</span>
+<span class="s2">        &lt;title&gt;Publisher Center - News Portal&lt;/title&gt;</span>
+<span class="s2">        &lt;style&gt;</span>
+<span class="s2">            :root </span><span class="se">{{</span>
+<span class="s2">                --bg-main: #f8fafc;</span>
+<span class="s2">                --surface: #ffffff;</span>
+<span class="s2">                --text-main: #1e293b;</span>
+<span class="s2">                --text-muted: #64748b;</span>
+<span class="s2">                --primary: #2563eb;</span>
+<span class="s2">                --primary-hover: #1d4ed8;</span>
+<span class="s2">                --success: #10b981;</span>
+<span class="s2">                --success-light: #ecfdf5;</span>
+<span class="s2">                --warning: #f59e0b;</span>
+<span class="s2">                --warning-light: #fffbeb;</span>
+<span class="s2">                --border-color: #e2e8f0;</span>
+<span class="s2">                --danger: #ef4444;</span>
+<span class="s2">            </span><span class="se">}}</span>
+<span class="s2">            </span>
+<span class="s2">            body </span><span class="se">{{</span>
+<span class="s2">                font-family: &#39;Segoe UI&#39;, -apple-system, BlinkMacSystemFont, Roboto, sans-serif;</span>
+<span class="s2">                background-color: var(--bg-main);</span>
+<span class="s2">                color: var(--text-main);</span>
+<span class="s2">                margin: 0;</span>
+<span class="s2">                padding: 0;</span>
+<span class="s2">                min-height: 100vh;</span>
+<span class="s2">            </span><span class="se">}}</span>
+<span class="s2">            </span>
+<span class="s2">            .navbar </span><span class="se">{{</span>
+<span class="s2">                background-color: #0f172a;</span>
+<span class="s2">                color: white;</span>
+<span class="s2">                padding: 16px 40px;</span>
+<span class="s2">                display: flex;</span>
+<span class="s2">                justify-content: space-between;</span>
+<span class="s2">                align-items: center;</span>
+<span class="s2">                box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);</span>
+<span class="s2">            </span><span class="se">}}</span>
+<span class="s2">            </span>
+<span class="s2">            .navbar h1 </span><span class="se">{{</span>
+<span class="s2">                margin: 0;</span>
+<span class="s2">                font-size: 20px;</span>
+<span class="s2">                font-weight: 700;</span>
+<span class="s2">                letter-spacing: -0.5px;</span>
+<span class="s2">            </span><span class="se">}}</span>
+<span class="s2">            </span>
+<span class="s2">            .navbar a </span><span class="se">{{</span>
+<span class="s2">                color: #94a3b8;</span>
+<span class="s2">                text-decoration: none;</span>
+<span class="s2">                font-weight: 600;</span>
+<span class="s2">                font-size: 14px;</span>
+<span class="s2">                transition: color 0.2s;</span>
+<span class="s2">            </span><span class="se">}}</span>
+<span class="s2">            </span>
+<span class="s2">            .navbar a:hover </span><span class="se">{{</span>
+<span class="s2">                color: white;</span>
+<span class="s2">            </span><span class="se">}}</span>
+<span class="s2">            </span>
+<span class="s2">            .container </span><span class="se">{{</span>
+<span class="s2">                max-width: 1040px;</span>
+<span class="s2">                margin: 40px auto;</span>
+<span class="s2">                padding: 0 24px;</span>
+<span class="s2">            </span><span class="se">}}</span>
+<span class="s2">            </span>
+<span class="s2">            .header-split </span><span class="se">{{</span>
+<span class="s2">                display: flex;</span>
+<span class="s2">                justify-content: space-between;</span>
+<span class="s2">                align-items: flex-end;</span>
+<span class="s2">                margin-bottom: 32px;</span>
+<span class="s2">                gap: 20px;</span>
+<span class="s2">            </span><span class="se">}}</span>
+<span class="s2">            </span>
+<span class="s2">            .hero-greeting </span><span class="se">{{</span>
+<span class="s2">                margin: 0;</span>
+<span class="s2">            </span><span class="se">}}</span>
+<span class="s2">            </span>
+<span class="s2">            .hero-greeting h2 </span><span class="se">{{</span>
+<span class="s2">                margin: 0;</span>
+<span class="s2">                font-size: 28px;</span>
+<span class="s2">                font-weight: 800;</span>
+<span class="s2">                letter-spacing: -0.75px;</span>
+<span class="s2">                color: #0f172a;</span>
+<span class="s2">            </span><span class="se">}}</span>
+<span class="s2">            </span>
+<span class="s2">            .hero-greeting p </span><span class="se">{{</span>
+<span class="s2">                margin: 6px 0 0 0;</span>
+<span class="s2">                color: var(--text-muted);</span>
+<span class="s2">                font-size: 15px;</span>
+<span class="s2">            </span><span class="se">}}</span>
+<span class="s2">            </span>
+<span class="s2">            .logout-panel </span><span class="se">{{</span>
+<span class="s2">                text-align: right;</span>
+<span class="s2">                flex-shrink: 0;</span>
+<span class="s2">            </span><span class="se">}}</span>
+<span class="s2">            </span>
+<span class="s2">            .btn-logout-link </span><span class="se">{{</span>
+<span class="s2">                background: none;</span>
+<span class="s2">                border: 1px solid #cbd5e1;</span>
+<span class="s2">                color: #475569;</span>
+<span class="s2">                font-weight: 700;</span>
+<span class="s2">                cursor: pointer;</span>
+<span class="s2">                font-family: inherit;</span>
+<span class="s2">                font-size: 13px;</span>
+<span class="s2">                padding: 8px 16px;</span>
+<span class="s2">                border-radius: 6px;</span>
+<span class="s2">                text-transform: uppercase;</span>
+<span class="s2">                letter-spacing: 0.5px;</span>
+<span class="s2">                transition: all 0.2s;</span>
+<span class="s2">            </span><span class="se">}}</span>
+<span class="s2">            </span>
+<span class="s2">            .btn-logout-link:hover </span><span class="se">{{</span>
+<span class="s2">                background-color: #f1f5f9;</span>
+<span class="s2">                color: var(--danger);</span>
+<span class="s2">                border-color: #fca5a5;</span>
+<span class="s2">            </span><span class="se">}}</span>
+<span class="s2">            </span>
+<span class="s2">            .main-panel </span><span class="se">{{</span>
+<span class="s2">                background: var(--surface);</span>
+<span class="s2">                border-radius: 12px;</span>
+<span class="s2">                border: 1px solid var(--border-color);</span>
+<span class="s2">                box-shadow: 0 1px 3px 0 rgba(0,0,0,0.05);</span>
+<span class="s2">                padding: 35px;</span>
+<span class="s2">            </span><span class="se">}}</span>
+<span class="s2">            </span>
+<span class="s2">            .panel-header </span><span class="se">{{</span>
+<span class="s2">                display: flex;</span>
+<span class="s2">                justify-content: space-between;</span>
+<span class="s2">                align-items: center;</span>
+<span class="s2">                border-bottom: 1px solid var(--border-color);</span>
+<span class="s2">                padding-bottom: 24px;</span>
+<span class="s2">                margin-bottom: 24px;</span>
+<span class="s2">            </span><span class="se">}}</span>
+<span class="s2">            </span>
+<span class="s2">            .brand-identity </span><span class="se">{{</span>
+<span class="s2">                display: flex;</span>
+<span class="s2">                align-items: center;</span>
+<span class="s2">                gap: 16px;</span>
+<span class="s2">            </span><span class="se">}}</span>
+<span class="s2">            </span>
+<span class="s2">            .brand-icon </span><span class="se">{{</span>
+<span class="s2">                font-size: 24px;</span>
+<span class="s2">                background: #f1f5f9;</span>
+<span class="s2">                padding: 12px;</span>
+<span class="s2">                border-radius: 10px;</span>
+<span class="s2">                display: inline-block;</span>
+<span class="s2">            </span><span class="se">}}</span>
+<span class="s2">            </span>
+<span class="s2">            .brand-identity h3 </span><span class="se">{{</span>
+<span class="s2">                margin: 0;</span>
+<span class="s2">                font-size: 22px;</span>
+<span class="s2">                font-weight: 700;</span>
+<span class="s2">                color: #0f172a;</span>
+<span class="s2">            </span><span class="se">}}</span>
+<span class="s2">            </span>
+<span class="s2">            .brand-identity p </span><span class="se">{{</span>
+<span class="s2">                margin: 2px 0 0 0;</span>
+<span class="s2">                font-size: 13px;</span>
+<span class="s2">                color: var(--text-muted);</span>
+<span class="s2">                text-transform: uppercase;</span>
+<span class="s2">                font-weight: 600;</span>
+<span class="s2">                letter-spacing: 0.5px;</span>
+<span class="s2">            </span><span class="se">}}</span>
+<span class="s2">            </span>
+<span class="s2">            .badge </span><span class="se">{{</span>
+<span class="s2">                padding: 6px 14px;</span>
+<span class="s2">                border-radius: 9999px;</span>
+<span class="s2">                font-size: 13px;</span>
+<span class="s2">                font-weight: 700;</span>
+<span class="s2">                text-transform: uppercase;</span>
+<span class="s2">            </span><span class="se">}}</span>
+<span class="s2">            </span>
+<span class="s2">            .badge-active </span><span class="se">{{</span>
+<span class="s2">                background-color: var(--success-light);</span>
+<span class="s2">                color: var(--success);</span>
+<span class="s2">                border: 1px solid #a7f3d0;</span>
+<span class="s2">            </span><span class="se">}}</span>
+<span class="s2">            </span>
+<span class="s2">            .panel-description </span><span class="se">{{</span>
+<span class="s2">                color: #475569;</span>
+<span class="s2">                font-size: 15px;</span>
+<span class="s2">                line-height: 1.6;</span>
+<span class="s2">                margin: 0 0 32px 0;</span>
+<span class="s2">            </span><span class="se">}}</span>
+<span class="s2">            </span>
+<span class="s2">            .grid-metrics </span><span class="se">{{</span>
+<span class="s2">                display: grid;</span>
+<span class="s2">                grid-template-columns: repeat(4, 1fr);</span>
+<span class="s2">                gap: 20px;</span>
+<span class="s2">                margin-bottom: 35px;</span>
+<span class="s2">            </span><span class="se">}}</span>
+
+<span class="s2">            /* --- RESTORED ACCENT AND CONTAINER CLASSES --- */</span>
+<span class="s2">            .metric-card </span><span class="se">{{</span>
+<span class="s2">                background: #f8fafc;</span>
+<span class="s2">                border: 1px solid var(--border-color);</span>
+<span class="s2">                border-radius: 10px;</span>
+<span class="s2">                padding: 20px;</span>
+<span class="s2">                text-align: left;</span>
+<span class="s2">            </span><span class="se">}}</span>
+<span class="s2">            </span>
+<span class="s2">            .metric-title </span><span class="se">{{</span>
+<span class="s2">                font-size: 13px;</span>
+<span class="s2">                font-weight: 700;</span>
+<span class="s2">                color: var(--text-muted);</span>
+<span class="s2">                text-transform: uppercase;</span>
+<span class="s2">                letter-spacing: 0.5px;</span>
+<span class="s2">            </span><span class="se">}}</span>
+<span class="s2">            </span>
+<span class="s2">            .metric-num </span><span class="se">{{</span>
+<span class="s2">                font-size: 32px;</span>
+<span class="s2">                font-weight: 800;</span>
+<span class="s2">                color: #0f172a;</span>
+<span class="s2">                margin: 12px 0 6px 0;</span>
+<span class="s2">                line-height: 1;</span>
+<span class="s2">            </span><span class="se">}}</span>
+<span class="s2">            </span>
+<span class="s2">            .metric-sub </span><span class="se">{{</span>
+<span class="s2">                font-size: 12px;</span>
+<span class="s2">                color: var(--text-muted);</span>
+<span class="s2">            </span><span class="se">}}</span>
+<span class="s2">            </span>
+<span class="s2">            .card-editors </span><span class="se">{{</span><span class="s2"> border-left: 4px solid var(--primary); </span><span class="se">}}</span>
+<span class="s2">            .card-journalists </span><span class="se">{{</span><span class="s2"> border-left: 4px solid var(--success); </span><span class="se">}}</span>
+<span class="s2">            .card-pending </span><span class="se">{{</span><span class="s2"> border-left: 4px solid var(--warning); </span><span class="se">}}</span>
+<span class="s2">            .card-approved </span><span class="se">{{</span><span class="s2"> border-left: 4px solid #8b5cf6; </span><span class="se">}}</span>
+<span class="s2">            </span>
+<span class="s2">            .action-footer </span><span class="se">{{</span>
+<span class="s2">                border-top: 1px solid var(--border-color);</span>
+<span class="s2">                padding-top: 24px;</span>
+<span class="s2">                display: flex;</span>
+<span class="s2">                justify-content: flex-end;</span>
+<span class="s2">            </span><span class="se">}}</span>
+<span class="s2">            </span>
+<span class="s2">            .btn-primary </span><span class="se">{{</span>
+<span class="s2">                display: inline-flex;</span>
+<span class="s2">                align-items: center;</span>
+<span class="s2">                background-color: var(--primary);</span>
+<span class="s2">                color: white;</span>
+<span class="s2">                text-decoration: none;</span>
+<span class="s2">                padding: 12px 24px;</span>
+<span class="s2">                border-radius: 8px;</span>
+<span class="s2">                font-weight: 700;</span>
+<span class="s2">                font-size: 14px;</span>
+<span class="s2">                text-transform: uppercase;</span>
+<span class="s2">                border: none;</span>
+<span class="s2">                cursor: pointer;</span>
+<span class="s2">                transition: background-color 0.2s;</span>
+<span class="s2">            </span><span class="se">}}</span>
+<span class="s2">            </span>
+<span class="s2">            .btn-primary:hover </span><span class="se">{{</span>
+<span class="s2">                background-color: var(--primary-hover);</span>
+<span class="s2">            </span><span class="se">}}</span>
+<span class="s2">            </span>
+<span class="s2">            @media (max-width: 900px) </span><span class="se">{{</span>
+<span class="s2">                .grid-metrics </span><span class="se">{{</span><span class="s2"> grid-template-columns: repeat(2, 1fr); </span><span class="se">}}</span>
+<span class="s2">            </span><span class="se">}}</span>
+<span class="s2">            @media (max-width: 650px) </span><span class="se">{{</span>
+<span class="s2">                .header-split </span><span class="se">{{</span><span class="s2"> flex-direction: column; align-items: flex-start; gap: 16px; </span><span class="se">}}</span>
+<span class="s2">                .logout-panel </span><span class="se">{{</span><span class="s2"> text-align: left; width: 100%; </span><span class="se">}}</span>
+<span class="s2">                .btn-logout-link </span><span class="se">{{</span><span class="s2"> width: 100%; text-align: center; </span><span class="se">}}</span>
+<span class="s2">                .grid-metrics </span><span class="se">{{</span><span class="s2"> grid-template-columns: 1fr; </span><span class="se">}}</span>
+<span class="s2">            </span><span class="se">}}</span>
+<span class="s2">        &lt;/style&gt;</span>
+<span class="s2">    &lt;/head&gt;</span>
+<span class="s2">    &lt;body&gt;</span>
+<span class="s2">        &lt;nav class=&quot;navbar&quot;&gt;</span>
+<span class="s2">            &lt;h1&gt;📰 Publisher Workspace Console&lt;/h1&gt;</span>
+<span class="s2">            &lt;div&gt;</span>
+<span class="s2">                &lt;a href=&quot;</span><span class="si">{</span><span class="n">django_reverse</span><span class="p">(</span><span class="s1">&#39;news_api:system_landing_page&#39;</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;&gt;View Public Site&lt;/a&gt;</span>
+<span class="s2">            &lt;/div&gt;</span>
+<span class="s2">        &lt;/nav&gt;</span>
+<span class="s2">        </span>
+<span class="s2">        &lt;div class=&quot;container&quot;&gt;</span>
+<span class="s2">            &lt;div class=&quot;header-split&quot;&gt;</span>
+<span class="s2">                &lt;div class=&quot;hero-greeting&quot;&gt;</span>
+<span class="s2">                    &lt;h2&gt;Welcome Back, Operations Controller&lt;/h2&gt;</span>
+<span class="s2">                    &lt;p&gt;System Matrix Gateway Instance&lt;/p&gt;</span>
+<span class="s2">                &lt;/div&gt;</span>
+<span class="s2">                &lt;div class=&quot;logout-panel&quot;&gt;</span>
+<span class="s2">                    &lt;form action=&quot;</span><span class="si">{</span><span class="n">django_reverse</span><span class="p">(</span><span class="s1">&#39;news_api:logout&#39;</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot; method=&quot;POST&quot; style=&quot;margin: 0;&quot;&gt;</span>
+<span class="s2">                        &lt;input type=&quot;hidden&quot; name=&quot;csrfmiddlewaretoken&quot; value=&quot;</span><span class="si">{</span><span class="n">csrf_token</span><span class="si">}</span><span class="s2">&quot;&gt;</span>
+<span class="s2">                        &lt;button type=&quot;submit&quot; class=&quot;btn-logout-link&quot;&gt;</span>
+<span class="s2">                            Sign Out Account</span>
+<span class="s2">                        &lt;/button&gt;</span>
+<span class="s2">                    &lt;/form&gt;   </span>
+<span class="s2">                &lt;/div&gt;</span>
+<span class="s2">            &lt;/div&gt;</span>
+<span class="s2">            </span>
+<span class="s2">            &lt;!-- FIXED: Re-enclosed the panel block wrapper around your data fields --&gt;</span>
+<span class="s2">            &lt;main class=&quot;main-panel&quot;&gt;</span>
+<span class="s2">                </span><span class="si">{</span><span class="n">publisher_html_content</span><span class="si">}</span>
+<span class="s2">            &lt;/main&gt;</span>
+<span class="s2">        &lt;/div&gt;</span>
+<span class="s2">    &lt;/body&gt;</span>
+<span class="s2">    &lt;/html&gt;</span>
+<span class="s2">    &quot;&quot;&quot;</span>
+    
+    <span class="k">return</span> <span class="n">HttpResponse</span><span class="p">(</span><span class="n">html_layout</span><span class="p">)</span></div>
+
+
+    
+<div class="viewcode-block" id="portal_html_dashboard">
+<a class="viewcode-back" href="../../news_api.html#news_api.views.portal_html_dashboard">[docs]</a>
+<span class="nd">@login_required</span>
+<span class="nd">@user_passes_test</span><span class="p">(</span><span class="n">is_editor_check</span><span class="p">)</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">portal_html_dashboard</span><span class="p">(</span><span class="n">request</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Renders an isolated, master Editorial Dashboard layout view strictly for Content Editors.</span>
+
+<span class="sd">    Displays real-time system moderation parameters, tracking unapproved drafts </span>
+<span class="sd">    and live global publications completely separated from Publisher workspace controls.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        request (HttpRequest): System context capturing active user credentials, </span>
+<span class="sd">            authentication tokens, and framework meta parameters.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        HttpResponse: Generated raw HTML string payload rendering the moderation console.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># 1. Fetch system-wide content moderation statistics parameters</span>
+    <span class="n">pending_count</span> <span class="o">=</span> <span class="n">Article</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">approved</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span><span class="o">.</span><span class="n">count</span><span class="p">()</span>
+    <span class="n">approved_count</span> <span class="o">=</span> <span class="n">Article</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">approved</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">count</span><span class="p">()</span>
+
+    <span class="c1"># 2. Extract standard request verification parameters</span>
+    <span class="n">csrf_token</span> <span class="o">=</span> <span class="n">get_token</span><span class="p">(</span><span class="n">request</span><span class="p">)</span>
+
+    <span class="c1"># 3. Generate the absolute master administrative workspace layout payload</span>
+    <span class="n">html_content</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;&quot;&quot;</span>
+<span class="s2">    &lt;!DOCTYPE html&gt;</span>
+<span class="s2">    &lt;html lang=&quot;en&quot;&gt;</span>
+<span class="s2">    &lt;head&gt;</span>
+<span class="s2">        &lt;meta charset=&quot;UTF-8&quot;&gt;</span>
+<span class="s2">        &lt;title&gt;News Portal - Editorial Dashboard&lt;/title&gt;</span>
+<span class="s2">        &lt;style&gt;</span>
+<span class="s2">            body </span><span class="se">{{</span><span class="s2"> font-family: &#39;Segoe UI&#39;, sans-serif; background-color: #f4f7f6; color: #333; margin: 0; </span><span class="se">}}</span>
+<span class="s2">            .navbar </span><span class="se">{{</span><span class="s2"> background-color: #2c3e50; color: white; padding: 15px 30px; display: flex; justify-content: space-between; align-items: center; </span><span class="se">}}</span>
+<span class="s2">            .navbar h1 </span><span class="se">{{</span><span class="s2"> margin: 0; font-size: 24px; </span><span class="se">}}</span>
+<span class="s2">            .navbar a </span><span class="se">{{</span><span class="s2"> color: #ecf0f1; text-decoration: none; font-weight: bold; margin-left: 20px; </span><span class="se">}}</span>
+<span class="s2">            .container </span><span class="se">{{</span><span class="s2"> max-width: 1000px; margin: 40px auto; padding: 0 20px; </span><span class="se">}}</span>
+<span class="s2">            .hero </span><span class="se">{{</span><span class="s2"> background: white; padding: 40px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); text-align: center; margin-bottom: 30px; </span><span class="se">}}</span>
+<span class="s2">            .grid </span><span class="se">{{</span><span class="s2"> display: grid; grid-template-columns: 1fr 1fr; gap: 20px; </span><span class="se">}}</span>
+<span class="s2">            .card </span><span class="se">{{</span><span class="s2"> background: white; padding: 25px; border-radius: 6px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); text-align: center; border-top: 4px solid #2c3e50; box-sizing: border-box; </span><span class="se">}}</span>
+<span class="s2">            .card.alert-card </span><span class="se">{{</span><span class="s2"> border-top-color: #e74c3c; </span><span class="se">}}</span>
+<span class="s2">            .stat-num </span><span class="se">{{</span><span class="s2"> font-size: 36px; font-weight: bold; margin: 10px 0; color: #2c3e50; </span><span class="se">}}</span>
+<span class="s2">            .card.alert-card .stat-num </span><span class="se">{{</span><span class="s2"> color: #e74c3c; </span><span class="se">}}</span>
+<span class="s2">            .btn-action </span><span class="se">{{</span><span class="s2"> display: inline-block; margin-top: 15px; padding: 10px 20px; background-color: #2c3e50; color: white; text-decoration: none; border-radius: 4px; font-weight: bold; font-size: 14px; text-transform: uppercase; border: none; cursor: pointer; </span><span class="se">}}</span>
+<span class="s2">            .btn-action:hover </span><span class="se">{{</span><span class="s2"> opacity: 0.9; </span><span class="se">}}</span>
+<span class="s2">            .btn-action.btn-danger </span><span class="se">{{</span><span class="s2"> background-color: #e74c3c; </span><span class="se">}}</span>
+<span class="s2">        &lt;/style&gt;</span>
+<span class="s2">    &lt;/head&gt;</span>
+<span class="s2">    &lt;body&gt;</span>
+<span class="s2">        &lt;nav class=&quot;navbar&quot;&gt;</span>
+<span class="s2">            &lt;h1&gt;📰 News Portal System&lt;/h1&gt;</span>
+<span class="s2">            &lt;div&gt;</span>
+<span class="s2">                &lt;a href=&quot;</span><span class="si">{</span><span class="n">django_reverse</span><span class="p">(</span><span class="s1">&#39;news_api:system_landing_page&#39;</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;&gt;View Public Site&lt;/a&gt;</span>
+<span class="s2">                &lt;form action=&quot;</span><span class="si">{</span><span class="n">django_reverse</span><span class="p">(</span><span class="s1">&#39;news_api:logout&#39;</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot; method=&quot;POST&quot; style=&quot;display: inline; margin-left: 20px;&quot;&gt;</span>
+<span class="s2">                    &lt;input type=&quot;hidden&quot; name=&quot;csrfmiddlewaretoken&quot; value=&quot;</span><span class="si">{</span><span class="n">csrf_token</span><span class="si">}</span><span class="s2">&quot;&gt;</span>
+<span class="s2">                    &lt;button type=&quot;submit&quot; style=&quot;background: none; border: none; color: #ecf0f1; font-weight: bold; cursor: pointer; font-family: inherit; font-size: 16px; padding: 0;&quot;&gt;</span>
+<span class="s2">                        Sign Out (</span><span class="si">{</span><span class="n">request</span><span class="o">.</span><span class="n">user</span><span class="o">.</span><span class="n">username</span><span class="si">}</span><span class="s2">)</span>
+<span class="s2">                    &lt;/button&gt;</span>
+<span class="s2">                &lt;/form&gt;            </span>
+<span class="s2">            &lt;/div&gt;</span>
+<span class="s2">        &lt;/nav&gt;</span>
+<span class="s2">        &lt;div class=&quot;container&quot;&gt;</span>
+<span class="s2">            &lt;div class=&quot;hero&quot;&gt;</span>
+<span class="s2">                &lt;h2&gt;Welcome back to the Editorial Control Hub&lt;/h2&gt;</span>
+<span class="s2">                &lt;p&gt;Logged in as: &lt;strong&gt;</span><span class="si">{</span><span class="n">request</span><span class="o">.</span><span class="n">user</span><span class="o">.</span><span class="n">get_full_name</span><span class="p">()</span><span class="w"> </span><span class="ow">or</span><span class="w"> </span><span class="n">request</span><span class="o">.</span><span class="n">user</span><span class="o">.</span><span class="n">username</span><span class="si">}</span><span class="s2">&lt;/strong&gt; (</span><span class="si">{</span><span class="n">request</span><span class="o">.</span><span class="n">user</span><span class="o">.</span><span class="n">role</span><span class="si">}</span><span class="s2">)&lt;/p&gt;</span>
+<span class="s2">            &lt;/div&gt;</span>
+<span class="s2">            </span>
+<span class="s2">            &lt;div class=&quot;grid&quot;&gt;</span>
+<span class="s2">                &lt;div class=&quot;card alert-card&quot;&gt;</span>
+<span class="s2">                    &lt;h3&gt;Moderation Queue&lt;/h3&gt;</span>
+<span class="s2">                    &lt;div class=&quot;stat-num&quot;&gt;</span><span class="si">{</span><span class="n">pending_count</span><span class="si">}</span><span class="s2">&lt;/div&gt;</span>
+<span class="s2">                    &lt;p&gt;Articles awaiting factual authorization and subscriber dispatch notifications.&lt;/p&gt;</span>
+<span class="s2">                    &lt;a href=&quot;</span><span class="si">{</span><span class="n">django_reverse</span><span class="p">(</span><span class="s1">&#39;news_api:review_list&#39;</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot; class=&quot;btn-action btn-danger&quot;&gt;Open Review Queue&lt;/a&gt;</span>
+<span class="s2">                &lt;/div&gt;</span>
+<span class="s2">                </span>
+<span class="s2">                &lt;div class=&quot;card&quot;&gt;</span>
+<span class="s2">                    &lt;h3&gt;Published Directory&lt;/h3&gt;</span>
+<span class="s2">                    &lt;div class=&quot;stat-num&quot;&gt;</span><span class="si">{</span><span class="n">approved_count</span><span class="si">}</span><span class="s2">&lt;/div&gt;</span>
+<span class="s2">                    &lt;p&gt;Live entries currently broadcasted to readers and accessible through public API feeds.&lt;/p&gt;</span>
+<span class="s2">                    &lt;a href=&quot;</span><span class="si">{</span><span class="n">django_reverse</span><span class="p">(</span><span class="s1">&#39;news_api:system_landing_page&#39;</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot; class=&quot;btn-action&quot;&gt;View Live Feed&lt;/a&gt;</span>
+<span class="s2">                &lt;/div&gt;</span>
+<span class="s2">            &lt;/div&gt;</span>
+<span class="s2">        &lt;/div&gt;</span>
+<span class="s2">    &lt;/body&gt;</span>
+<span class="s2">    &lt;/html&gt;</span>
+<span class="s2">    &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">HttpResponse</span><span class="p">(</span><span class="n">html_content</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="approve_article_action">
+<a class="viewcode-back" href="../../news_api.html#news_api.views.approve_article_action">[docs]</a>
+<span class="nd">@login_required</span>
+<span class="nd">@user_passes_test</span><span class="p">(</span><span class="n">is_editor_check</span><span class="p">)</span>
+<span class="nd">@require_POST</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">approve_article_action</span><span class="p">(</span><span class="n">request</span><span class="p">,</span> <span class="n">article_id</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Flips validation flags for a draft article after verifying corporate workspace ownership.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        request (HttpRequest): Active thread configuration request instance.</span>
+<span class="sd">        article_id (int): Primary key row identifier targeting the article record.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        HttpResponseRedirect: Action complete re-route target back to the review queue index.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Find the editor&#39;s active corporate workspace profile</span>
+    <span class="n">user_publisher</span> <span class="o">=</span> <span class="n">Publisher</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">editors</span><span class="o">=</span><span class="n">request</span><span class="o">.</span><span class="n">user</span><span class="p">)</span><span class="o">.</span><span class="n">first</span><span class="p">()</span>
+    
+    <span class="c1"># Secure Lookup: Ensure the article exists AND belongs explicitly to the editor&#39;s workspace</span>
+    <span class="n">article</span> <span class="o">=</span> <span class="n">get_object_or_404</span><span class="p">(</span><span class="n">Article</span><span class="p">,</span> <span class="nb">id</span><span class="o">=</span><span class="n">article_id</span><span class="p">,</span> <span class="n">publisher</span><span class="o">=</span><span class="n">user_publisher</span><span class="p">)</span>
+    
+    <span class="c1"># Flip the verification flags</span>
+    <span class="n">article</span><span class="o">.</span><span class="n">approved</span> <span class="o">=</span> <span class="kc">True</span>
+    <span class="n">article</span><span class="o">.</span><span class="n">save</span><span class="p">()</span>
+
+    <span class="c1"># --- PROCESS SUBSCRIBER NOTIFICATIONS LAYER ---</span>
+    <span class="n">recipient_emails</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">if</span> <span class="n">article</span><span class="o">.</span><span class="n">author_id</span><span class="p">:</span>
+        <span class="n">journalist_subs</span> <span class="o">=</span> <span class="n">article</span><span class="o">.</span><span class="n">author</span><span class="o">.</span><span class="n">journalist_subscribers</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
+        <span class="n">recipient_emails</span><span class="o">.</span><span class="n">extend</span><span class="p">([</span><span class="n">sub</span><span class="o">.</span><span class="n">email</span> <span class="k">for</span> <span class="n">sub</span> <span class="ow">in</span> <span class="n">journalist_subs</span> <span class="k">if</span> <span class="n">sub</span><span class="o">.</span><span class="n">email</span><span class="p">])</span>
+    
+    <span class="k">if</span> <span class="n">article</span><span class="o">.</span><span class="n">publisher_id</span><span class="p">:</span>
+        <span class="n">pub_subs</span> <span class="o">=</span> <span class="n">article</span><span class="o">.</span><span class="n">publisher</span><span class="o">.</span><span class="n">reader_subscribers</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
+        <span class="n">recipient_emails</span><span class="o">.</span><span class="n">extend</span><span class="p">([</span><span class="n">sub</span><span class="o">.</span><span class="n">email</span> <span class="k">for</span> <span class="n">sub</span> <span class="ow">in</span> <span class="n">pub_subs</span> <span class="k">if</span> <span class="n">sub</span><span class="o">.</span><span class="n">email</span><span class="p">])</span>
+
+    <span class="n">recipient_emails</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="n">recipient_emails</span><span class="p">))</span>
+
+    <span class="k">if</span> <span class="n">recipient_emails</span><span class="p">:</span>
+        <span class="n">author_name</span> <span class="o">=</span> <span class="n">article</span><span class="o">.</span><span class="n">author</span><span class="o">.</span><span class="n">username</span> <span class="k">if</span> <span class="n">article</span><span class="o">.</span><span class="n">author_id</span> <span class="k">else</span> <span class="n">user_publisher</span><span class="o">.</span><span class="n">name</span>
+        <span class="n">send_mail</span><span class="p">(</span>
+            <span class="n">subject</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;New Article Released: </span><span class="si">{</span><span class="n">article</span><span class="o">.</span><span class="n">title</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
+            <span class="n">message</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;Read our latest drop from </span><span class="si">{</span><span class="n">user_publisher</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2"> via </span><span class="si">{</span><span class="n">author_name</span><span class="si">}</span><span class="s2">.&quot;</span><span class="p">,</span>
+            <span class="n">from_email</span><span class="o">=</span><span class="s2">&quot;noreply@newsnetwork.local&quot;</span><span class="p">,</span>
+            <span class="n">recipient_list</span><span class="o">=</span><span class="n">recipient_emails</span><span class="p">,</span>
+            <span class="n">fail_silently</span><span class="o">=</span><span class="kc">True</span>
+        <span class="p">)</span>
+
+    <span class="c1"># Fire logging webhook dispatch hook</span>
+    <span class="n">domain</span> <span class="o">=</span> <span class="n">request</span><span class="o">.</span><span class="n">build_absolute_uri</span><span class="p">(</span><span class="s1">&#39;/&#39;</span><span class="p">)[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">requests</span><span class="o">.</span><span class="n">post</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">domain</span><span class="si">}</span><span class="s2">/api/approved/&quot;</span><span class="p">,</span> <span class="n">json</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;article_id&quot;</span><span class="p">:</span> <span class="n">article</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="s2">&quot;status&quot;</span><span class="p">:</span> <span class="s2">&quot;APPROVED&quot;</span><span class="p">},</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">5</span><span class="p">)</span>
+    <span class="k">except</span> <span class="n">requests</span><span class="o">.</span><span class="n">exceptions</span><span class="o">.</span><span class="n">RequestException</span><span class="p">:</span>
+        <span class="k">pass</span> 
+
+    <span class="k">return</span> <span class="n">redirect</span><span class="p">(</span><span class="s1">&#39;news_api:review_list&#39;</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="review_articles_list">
+<a class="viewcode-back" href="../../news_api.html#news_api.views.review_articles_list">[docs]</a>
+<span class="nd">@login_required</span>
+<span class="nd">@user_passes_test</span><span class="p">(</span><span class="n">is_editor_check</span><span class="p">)</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">review_articles_list</span><span class="p">(</span><span class="n">request</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Renders the moderation queue table view filtered strictly by the Editor&#39;s Publisher workspace.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        request (HttpRequest): Core incoming transactional payload request object.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        HttpResponse: A template layout rendering unapproved drafts belonging only </span>
+<span class="sd">            to the editor&#39;s corporate publication.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Find the corporate organization workspace where this active editor belongs</span>
+    <span class="n">user_publisher</span> <span class="o">=</span> <span class="n">Publisher</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">editors</span><span class="o">=</span><span class="n">request</span><span class="o">.</span><span class="n">user</span><span class="p">)</span><span class="o">.</span><span class="n">first</span><span class="p">()</span>
+    
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">user_publisher</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">render</span><span class="p">(</span><span class="n">request</span><span class="p">,</span> <span class="s1">&#39;news_api/error.html&#39;</span><span class="p">,</span> <span class="p">{</span>
+            <span class="s1">&#39;message&#39;</span><span class="p">:</span> <span class="s2">&quot;Access Denied: You must be linked to a Publisher organization to moderate articles.&quot;</span>
+        <span class="p">})</span>
+
+    <span class="c1"># FIXED: Restrict the query pool to articles matching the editor&#39;s publisher ID</span>
+    <span class="n">unapproved_articles</span> <span class="o">=</span> <span class="n">Article</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span>
+        <span class="n">publisher</span><span class="o">=</span><span class="n">user_publisher</span><span class="p">,</span>
+        <span class="n">approved</span><span class="o">=</span><span class="kc">False</span>
+    <span class="p">)</span><span class="o">.</span><span class="n">order_by</span><span class="p">(</span><span class="s1">&#39;-created_at&#39;</span><span class="p">)</span>
+    
+    <span class="k">return</span> <span class="n">render</span><span class="p">(</span><span class="n">request</span><span class="p">,</span> <span class="s1">&#39;news_api/review_list.html&#39;</span><span class="p">,</span> <span class="p">{</span><span class="s1">&#39;articles&#39;</span><span class="p">:</span> <span class="n">unapproved_articles</span><span class="p">})</span></div>
+
+
+<div class="viewcode-block" id="reader_dashboard">
+<a class="viewcode-back" href="../../news_api.html#news_api.views.reader_dashboard">[docs]</a>
+<span class="nd">@login_required</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">reader_dashboard</span><span class="p">(</span><span class="n">request</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Renders the custom profile landing control layout for standard readers.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        request (HttpRequest): Session context capturing active user authentication profiles.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        HttpResponse: Rendered baseline reading summary interface template layout.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">request</span><span class="o">.</span><span class="n">user</span><span class="p">,</span> <span class="s1">&#39;role&#39;</span><span class="p">,</span> <span class="s1">&#39;reader&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="o">!=</span> <span class="s1">&#39;reader&#39;</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">redirect</span><span class="p">(</span><span class="s1">&#39;news_api:dashboard_redirect&#39;</span><span class="p">)</span>
+        
+    <span class="k">return</span> <span class="n">render</span><span class="p">(</span><span class="n">request</span><span class="p">,</span> <span class="s1">&#39;news_api/reader.html&#39;</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="journalist_dashboard">
+<a class="viewcode-back" href="../../news_api.html#news_api.views.journalist_dashboard">[docs]</a>
+<span class="nd">@login_required</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">journalist_dashboard</span><span class="p">(</span><span class="n">request</span><span class="p">):</span>  <span class="c1"># Maintained exact typo signature from core source tree</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Renders the landing console template dashboard workspace for Journalists.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        request (HttpRequest): Session thread tracking authenticated writer context.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        HttpResponse: Rendered reporter writing operations station control layout.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">render</span><span class="p">(</span><span class="n">request</span><span class="p">,</span> <span class="s1">&#39;news_api/journalist.html&#39;</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="editor_dashboard">
+<a class="viewcode-back" href="../../news_api.html#news_api.views.editor_dashboard">[docs]</a>
+<span class="nd">@login_required</span>
+<span class="nd">@user_passes_test</span><span class="p">(</span><span class="n">is_editor_check</span><span class="p">)</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">editor_dashboard</span><span class="p">(</span><span class="n">request</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Renders the administrative moderation template feed view for corporate Editors.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        request (HttpRequest): Core incoming dashboard validation transaction payload.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        HttpResponse: Rendered workspace review template mapping pending article counts.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">pending_articles</span> <span class="o">=</span> <span class="n">Article</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">approved</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span><span class="o">.</span><span class="n">order_by</span><span class="p">(</span><span class="s1">&#39;-created_at&#39;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">render</span><span class="p">(</span><span class="n">request</span><span class="p">,</span> <span class="s1">&#39;news_api/editor.html&#39;</span><span class="p">,</span> <span class="p">{</span><span class="s1">&#39;articles&#39;</span><span class="p">:</span> <span class="n">pending_articles</span><span class="p">})</span></div>
+
+
+
+<span class="c1"># ==========================================</span>
+<span class="c1"># CLASS-BASED CREATION &amp; DELETION VIEWS</span>
+<span class="c1"># ==========================================</span>
+
+<span class="c1"># news_api/views.py</span>
+
+<div class="viewcode-block" id="ArticleCreateView">
+<a class="viewcode-back" href="../../news_api.html#news_api.views.ArticleCreateView">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">ArticleCreateView</span><span class="p">(</span><span class="n">PermissionRequiredMixin</span><span class="p">,</span> <span class="n">CreateView</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Handles graphic form submissions creating new isolated Article entries.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">model</span> <span class="o">=</span> <span class="n">Article</span>
+    <span class="n">form_class</span> <span class="o">=</span> <span class="n">ArticleModelForm</span>
+    <span class="n">template_name</span> <span class="o">=</span> <span class="s1">&#39;news_api/article_form.html&#39;</span>
+    <span class="n">permission_required</span> <span class="o">=</span> <span class="s1">&#39;news_api.add_article&#39;</span>
+
+<div class="viewcode-block" id="ArticleCreateView.get_form_kwargs">
+<a class="viewcode-back" href="../../news_api.html#news_api.views.ArticleCreateView.get_form_kwargs">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_form_kwargs</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Injects the active authenticated user into form validation loops.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">kwargs</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">get_form_kwargs</span><span class="p">()</span>
+        <span class="n">kwargs</span><span class="p">[</span><span class="s1">&#39;user&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">request</span><span class="o">.</span><span class="n">user</span>
+        <span class="k">return</span> <span class="n">kwargs</span></div>
+
+
+<div class="viewcode-block" id="ArticleCreateView.form_valid">
+<a class="viewcode-back" href="../../news_api.html#news_api.views.ArticleCreateView.form_valid">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">form_valid</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">form</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Evaluates form fields to preserve strict data single-source mutual exclusivity.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># 1. Build the model instance in memory without saving to disk yet</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">object</span> <span class="o">=</span> <span class="n">form</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="n">commit</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+        
+        <span class="c1"># 2. Enforce the tenant separation criteria checks</span>
+        <span class="k">if</span> <span class="n">form</span><span class="o">.</span><span class="n">cleaned_data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;publisher&#39;</span><span class="p">):</span>
+            <span class="c1"># It&#39;s an authorized publisher content stream item -&gt; Clear author reference field</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">object</span><span class="o">.</span><span class="n">author</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># Dropdown choice is empty -&gt; It&#39;s a clean independent article post by the active writer</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">object</span><span class="o">.</span><span class="n">author</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">request</span><span class="o">.</span><span class="n">user</span>
+
+        <span class="c1"># 3. Force the new draft directly to an unapproved state for editorial review</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">object</span><span class="o">.</span><span class="n">approved</span> <span class="o">=</span> <span class="kc">False</span> 
+        
+        <span class="c1"># 4. Save the object instance down to disk storage rows</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">object</span><span class="o">.</span><span class="n">save</span><span class="p">()</span>
+        
+        <span class="c1"># naturally execute your get_success_url() method mapping!</span>
+        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">form_valid</span><span class="p">(</span><span class="n">form</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="ArticleCreateView.get_success_url">
+<a class="viewcode-back" href="../../news_api.html#news_api.views.ArticleCreateView.get_success_url">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_success_url</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Redirect target back to the journalist console dashboard room workspace.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">django_reverse</span><span class="p">(</span><span class="s1">&#39;news_api:journalist_dashboard&#39;</span><span class="p">)</span></div>
+</div>
+
+
+
+
+<div class="viewcode-block" id="ArticleUpdateView">
+<a class="viewcode-back" href="../../news_api.html#news_api.views.ArticleUpdateView">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">ArticleUpdateView</span><span class="p">(</span><span class="n">PermissionRequiredMixin</span><span class="p">,</span> <span class="n">UpdateView</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Manages interactive content modifications across existing article entries.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">model</span> <span class="o">=</span> <span class="n">Article</span>
+    <span class="n">fields</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;title&#39;</span><span class="p">,</span> <span class="s1">&#39;content&#39;</span><span class="p">,</span> <span class="s1">&#39;publisher&#39;</span><span class="p">]</span>
+    <span class="n">template_name</span> <span class="o">=</span> <span class="s1">&#39;news_api/article_form.html&#39;</span>
+    <span class="n">permission_required</span> <span class="o">=</span> <span class="s1">&#39;news_api.change_article&#39;</span>
+    
+<div class="viewcode-block" id="ArticleUpdateView.get_success_url">
+<a class="viewcode-back" href="../../news_api.html#news_api.views.ArticleUpdateView.get_success_url">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_success_url</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Calculates path loops to route back to detail displays upon saving modifications.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">django_reverse</span><span class="p">(</span><span class="s1">&#39;news_api:article_detail&#39;</span><span class="p">,</span> <span class="n">kwargs</span><span class="o">=</span><span class="p">{</span><span class="s1">&#39;pk&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">object</span><span class="o">.</span><span class="n">pk</span><span class="p">})</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="ArticleDeleteView">
+<a class="viewcode-back" href="../../news_api.html#news_api.views.ArticleDeleteView">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">ArticleDeleteView</span><span class="p">(</span><span class="n">PermissionRequiredMixin</span><span class="p">,</span> <span class="n">DeleteView</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Handles absolute content block removal and database entry row destruction actions.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">model</span> <span class="o">=</span> <span class="n">Article</span>
+    <span class="n">template_name</span> <span class="o">=</span> <span class="s1">&#39;news_api/article_confirm_delete.html&#39;</span>
+    <span class="n">permission_required</span> <span class="o">=</span> <span class="s1">&#39;news_api.delete_article&#39;</span>
+    <span class="n">success_url</span> <span class="o">=</span> <span class="n">reverse_lazy</span><span class="p">(</span><span class="s1">&#39;news_api:system_landing_page&#39;</span><span class="p">)</span></div>
+
+
+
+<span class="c1"># ==========================================</span>
+<span class="c1"># DJANGO REST FRAMEWORK CONTROLLERS (APIs)</span>
+<span class="c1"># ==========================================</span>
+
+<div class="viewcode-block" id="ArticleListCreateAPIView">
+<a class="viewcode-back" href="../../news_api.html#news_api.views.ArticleListCreateAPIView">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">ArticleListCreateAPIView</span><span class="p">(</span><span class="n">generics</span><span class="o">.</span><span class="n">ListCreateAPIView</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    API endpoint tracking approved listing payloads and accepting fresh content drafts.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">queryset</span> <span class="o">=</span> <span class="n">Article</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">approved</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">serializer_class</span> <span class="o">=</span> <span class="n">ArticleSerializer</span>
+    <span class="n">permission_classes</span> <span class="o">=</span> <span class="p">[</span><span class="n">permissions</span><span class="o">.</span><span class="n">IsAuthenticatedOrReadOnly</span><span class="p">,</span> <span class="n">IsEditorOrJournalistUser</span><span class="p">]</span>
+    
+<div class="viewcode-block" id="ArticleListCreateAPIView.perform_create">
+<a class="viewcode-back" href="../../news_api.html#news_api.views.ArticleListCreateAPIView.perform_create">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">perform_create</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">serializer</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Intercepts serialization pipelines to block rogue multi-tenant publisher assignments.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">user</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">request</span><span class="o">.</span><span class="n">user</span>
+        <span class="n">chosen_publisher</span> <span class="o">=</span> <span class="n">serializer</span><span class="o">.</span><span class="n">validated_data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;publisher&#39;</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">chosen_publisher</span><span class="p">:</span>
+            <span class="c1"># FIXED: Verify the journalist belongs to the publisher passed in the JSON payload</span>
+            <span class="n">is_authorized</span> <span class="o">=</span> <span class="n">chosen_publisher</span><span class="o">.</span><span class="n">journalists</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="nb">id</span><span class="o">=</span><span class="n">user</span><span class="o">.</span><span class="n">id</span><span class="p">)</span><span class="o">.</span><span class="n">exists</span><span class="p">()</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">is_authorized</span><span class="p">:</span>
+                <span class="kn">from</span><span class="w"> </span><span class="nn">rest_framework.exceptions</span><span class="w"> </span><span class="kn">import</span> <span class="n">ValidationError</span> <span class="k">as</span> <span class="n">APIValidationError</span>
+                <span class="k">raise</span> <span class="n">APIValidationError</span><span class="p">(</span>
+                    <span class="p">{</span><span class="s2">&quot;publisher&quot;</span><span class="p">:</span> <span class="sa">f</span><span class="s2">&quot;Security Exception: You do not hold writing permissions for &#39;</span><span class="si">{</span><span class="n">chosen_publisher</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">&#39;.&quot;</span><span class="p">}</span>
+                <span class="p">)</span>
+            
+            <span class="c1"># Safe: Strip author link out since it belongs to a verified publisher stream layout</span>
+            <span class="n">serializer</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="n">publisher</span><span class="o">=</span><span class="n">chosen_publisher</span><span class="p">,</span> <span class="n">author</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">approved</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># Safe: No publisher provided -&gt; Process cleanly as an independent post</span>
+            <span class="n">serializer</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="n">author</span><span class="o">=</span><span class="n">user</span><span class="p">,</span> <span class="n">publisher</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">approved</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="LegacyLogoutView">
+<a class="viewcode-back" href="../../news_api.html#news_api.views.LegacyLogoutView">[docs]</a>
+<span class="nd">@method_decorator</span><span class="p">(</span><span class="n">csrf_exempt</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;dispatch&#39;</span><span class="p">)</span> 
+<span class="k">class</span><span class="w"> </span><span class="nc">LegacyLogoutView</span><span class="p">(</span><span class="n">auth_views</span><span class="o">.</span><span class="n">LogoutView</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Safely permits legacy GET request methods and handles CSRF-free logout loops.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+<div class="viewcode-block" id="LegacyLogoutView.get">
+<a class="viewcode-back" href="../../news_api.html#news_api.views.LegacyLogoutView.get">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">get</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">request</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Maps fallthrough GET instructions cleanly into the standard POST handler block.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">post</span><span class="p">(</span><span class="n">request</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="ArticleSubscribedListAPIView">
+<a class="viewcode-back" href="../../news_api.html#news_api.views.ArticleSubscribedListAPIView">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">ArticleSubscribedListAPIView</span><span class="p">(</span><span class="n">generics</span><span class="o">.</span><span class="n">ListAPIView</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Extracts custom text timeline feeds containing records from subscribed sources.</span>
+
+<span class="sd">    Queries the authenticated user&#39;s profile configuration settings to extract </span>
+<span class="sd">    lists of followed independent journalists and corporate publishers, returning </span>
+<span class="sd">    a distinct pool of approved articles.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">serializer_class</span> <span class="o">=</span> <span class="n">ArticleSerializer</span>
+    <span class="n">permission_classes</span> <span class="o">=</span> <span class="p">[</span><span class="n">permissions</span><span class="o">.</span><span class="n">IsAuthenticated</span><span class="p">]</span>
+
+<div class="viewcode-block" id="ArticleSubscribedListAPIView.get_queryset">
+<a class="viewcode-back" href="../../news_api.html#news_api.views.ArticleSubscribedListAPIView.get_queryset">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_queryset</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Filters the general content repository matrix based on a user&#39;s subscription profile.</span>
+
+<span class="sd">        Evaluates many-to-many relationship tracking matrices utilizing complex OR </span>
+<span class="sd">        statements via models.Q before purging duplicates and ordering by timestamp metrics.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            QuerySet: An evaluated, distinct dataset pool containing approved articles matching </span>
+<span class="sd">                the user&#39;s subscription tracking profiles.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">user</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">request</span><span class="o">.</span><span class="n">user</span>
+        
+        <span class="c1"># Extract individual tracking lists from the authenticated session user</span>
+        <span class="n">subscribed_journalists</span> <span class="o">=</span> <span class="n">user</span><span class="o">.</span><span class="n">subscribed_journalists</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
+        <span class="n">subscribed_publishers</span> <span class="o">=</span> <span class="n">user</span><span class="o">.</span><span class="n">subscribed_publishers</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
+        
+        <span class="c1"># Construct and return the evaluated relational query stream</span>
+        <span class="k">return</span> <span class="n">Article</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span>
+            <span class="n">models</span><span class="o">.</span><span class="n">Q</span><span class="p">(</span><span class="n">author__in</span><span class="o">=</span><span class="n">subscribed_journalists</span><span class="p">)</span> <span class="o">|</span> <span class="n">models</span><span class="o">.</span><span class="n">Q</span><span class="p">(</span><span class="n">publisher__in</span><span class="o">=</span><span class="n">subscribed_publishers</span><span class="p">),</span>
+            <span class="n">approved</span><span class="o">=</span><span class="kc">True</span>
+        <span class="p">)</span><span class="o">.</span><span class="n">distinct</span><span class="p">()</span><span class="o">.</span><span class="n">order_by</span><span class="p">(</span><span class="s1">&#39;-created_at&#39;</span><span class="p">)</span></div>
+</div>
+
+
+                                      
+<div class="viewcode-block" id="ArticleDetailAPIView">
+<a class="viewcode-back" href="../../news_api.html#news_api.views.ArticleDetailAPIView">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">ArticleDetailAPIView</span><span class="p">(</span><span class="n">generics</span><span class="o">.</span><span class="n">RetrieveUpdateDestroyAPIView</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Processes single entry mutations, read lookups, or entry destruction cycles via API paths.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">queryset</span> <span class="o">=</span> <span class="n">Article</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
+    <span class="n">serializer_class</span> <span class="o">=</span> <span class="n">ArticleSerializer</span>
+    <span class="n">permission_classes</span> <span class="o">=</span> <span class="p">[</span><span class="n">permissions</span><span class="o">.</span><span class="n">IsAuthenticatedOrReadOnly</span><span class="p">,</span> <span class="n">IsEditorOrJournalistUser</span><span class="p">]</span></div>
+
+
+
+<div class="viewcode-block" id="NewsletterListCreateAPIView">
+<a class="viewcode-back" href="../../news_api.html#news_api.views.NewsletterListCreateAPIView">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">NewsletterListCreateAPIView</span><span class="p">(</span><span class="n">generics</span><span class="o">.</span><span class="n">ListCreateAPIView</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    API endpoint managing index collection readings or generating new periodic digest newsletters.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">queryset</span> <span class="o">=</span> <span class="n">Newsletter</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">all</span><span class="p">()</span><span class="o">.</span><span class="n">order_by</span><span class="p">(</span><span class="s1">&#39;-created_at&#39;</span><span class="p">)</span>
+    <span class="n">serializer_class</span> <span class="o">=</span> <span class="n">NewsletterSerializer</span>
+    <span class="n">permission_classes</span> <span class="o">=</span> <span class="p">[</span><span class="n">permissions</span><span class="o">.</span><span class="n">IsAuthenticatedOrReadOnly</span><span class="p">,</span> <span class="n">IsJournalistUser</span><span class="p">]</span>
+
+<div class="viewcode-block" id="NewsletterListCreateAPIView.perform_create">
+<a class="viewcode-back" href="../../news_api.html#news_api.views.NewsletterListCreateAPIView.perform_create">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">perform_create</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">serializer</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Automatically sets the currently authenticated writer as the author during creation.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">serializer</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="n">author</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">request</span><span class="o">.</span><span class="n">user</span><span class="p">)</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="APIApprovedLogEndpoint">
+<a class="viewcode-back" href="../../news_api.html#news_api.views.APIApprovedLogEndpoint">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">APIApprovedLogEndpoint</span><span class="p">(</span><span class="n">APIView</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Exposes a webhook validation endpoint logging article status changes.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">permission_classes</span> <span class="o">=</span> <span class="p">[</span><span class="n">permissions</span><span class="o">.</span><span class="n">AllowAny</span><span class="p">]</span> 
+
+<div class="viewcode-block" id="APIApprovedLogEndpoint.post">
+<a class="viewcode-back" href="../../news_api.html#news_api.views.APIApprovedLogEndpoint.post">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">post</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">request</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Captures structural JSON payload updates from dispatch workers.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">article_id</span> <span class="o">=</span> <span class="n">request</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;article_id&quot;</span><span class="p">)</span>
+        <span class="n">status_text</span> <span class="o">=</span> <span class="n">request</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;status&quot;</span><span class="p">)</span>
+        
+        <span class="c1"># Log payload data details to system output for tracking and telemetry analysis</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;[WEBHOOK RECEIVED] Article </span><span class="si">{</span><span class="n">article_id</span><span class="si">}</span><span class="s2"> status updated to: </span><span class="si">{</span><span class="n">status_text</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        
+        <span class="k">return</span> <span class="n">Response</span><span class="p">(</span>
+            <span class="p">{</span>
+                <span class="s2">&quot;success&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span> 
+                <span class="s2">&quot;message&quot;</span><span class="p">:</span> <span class="sa">f</span><span class="s2">&quot;Article </span><span class="si">{</span><span class="n">article_id</span><span class="si">}</span><span class="s2"> verification processed successfully.&quot;</span>
+            <span class="p">},</span> 
+            <span class="n">status</span><span class="o">=</span><span class="n">status</span><span class="o">.</span><span class="n">HTTP_201_CREATED</span>
+        <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="APIApprovedLogEndpoint.get">
+<a class="viewcode-back" href="../../news_api.html#news_api.views.APIApprovedLogEndpoint.get">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">get</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">request</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Provides online confirmation monitoring checks for diagnostic verification tools.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">Response</span><span class="p">(</span>
+            <span class="p">{</span><span class="s2">&quot;status&quot;</span><span class="p">:</span> <span class="s2">&quot;Logging endpoint online. Send a POST webhook payload to track data.&quot;</span><span class="p">},</span>
+            <span class="n">status</span><span class="o">=</span><span class="n">status</span><span class="o">.</span><span class="n">HTTP_200_OK</span>
+        <span class="p">)</span></div>
+</div>
+
+
+
+<span class="c1"># ==========================================</span>
+<span class="c1"># CLASS-BASED TEMPLATE VIEWS (GUI)</span>
+<span class="c1"># ==========================================</span>
+
+<div class="viewcode-block" id="NewsletterCreateView">
+<a class="viewcode-back" href="../../news_api.html#news_api.views.NewsletterCreateView">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">NewsletterCreateView</span><span class="p">(</span><span class="n">LoginRequiredMixin</span><span class="p">,</span> <span class="n">UserPassesTestMixin</span><span class="p">,</span> <span class="n">CreateView</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Handles template-based workspace form submissions to compile and draft Newsletters.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">model</span> <span class="o">=</span> <span class="n">Newsletter</span>
+    <span class="n">fields</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;title&#39;</span><span class="p">,</span> <span class="s1">&#39;description&#39;</span><span class="p">,</span> <span class="s1">&#39;articles&#39;</span><span class="p">]</span>
+    <span class="n">template_name</span> <span class="o">=</span> <span class="s1">&#39;news_api/newsletter_form.html&#39;</span>
+
+<div class="viewcode-block" id="NewsletterCreateView.test_func">
+<a class="viewcode-back" href="../../news_api.html#news_api.views.NewsletterCreateView.test_func">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_func</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Enforces access security parameters to isolate input screens from standard Readers.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            bool: True validation confirmation if the profile holds Journalist or Editor privileges.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">role</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">request</span><span class="o">.</span><span class="n">user</span><span class="p">,</span> <span class="s1">&#39;role&#39;</span><span class="p">,</span> <span class="s1">&#39;reader&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">role</span> <span class="ow">in</span> <span class="p">[</span><span class="s1">&#39;journalist&#39;</span><span class="p">,</span> <span class="s1">&#39;editor&#39;</span><span class="p">]</span></div>
+
+
+<div class="viewcode-block" id="NewsletterCreateView.form_valid">
+<a class="viewcode-back" href="../../news_api.html#news_api.views.NewsletterCreateView.form_valid">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">form_valid</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">form</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Automatically captures the active authenticated user to bind them as content Author.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            form (ModelForm): Generated visual interface input validation map.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            HttpResponseRedirect: Redirection processing block targeting the system list view page.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">form</span><span class="o">.</span><span class="n">instance</span><span class="o">.</span><span class="n">author</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">request</span><span class="o">.</span><span class="n">user</span>
+        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">form_valid</span><span class="p">(</span><span class="n">form</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="NewsletterCreateView.get_success_url">
+<a class="viewcode-back" href="../../news_api.html#news_api.views.NewsletterCreateView.get_success_url">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_success_url</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Calculates redirect route targets back to the index library view upon successful saves.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">django_reverse</span><span class="p">(</span><span class="s1">&#39;news_api:newsletter_list&#39;</span><span class="p">)</span></div>
+</div>
+
+
+<div class="viewcode-block" id="create_publisher_standalone_view">
+<a class="viewcode-back" href="../../news_api.html#news_api.views.create_publisher_standalone_view">[docs]</a>
+<span class="nd">@login_required</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">create_publisher_standalone_view</span><span class="p">(</span><span class="n">request</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Handles separate registration of a Publisher profile independent of user signup.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">existing_publisher</span> <span class="o">=</span> <span class="n">Publisher</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">editors</span><span class="o">=</span><span class="n">request</span><span class="o">.</span><span class="n">user</span><span class="p">)</span><span class="o">.</span><span class="n">first</span><span class="p">()</span>
+    <span class="k">if</span> <span class="n">existing_publisher</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">redirect</span><span class="p">(</span><span class="s1">&#39;news_api:editorial_dashboard&#39;</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">request</span><span class="o">.</span><span class="n">method</span> <span class="o">==</span> <span class="s1">&#39;POST&#39;</span><span class="p">:</span>
+        <span class="n">form</span> <span class="o">=</span> <span class="n">PublisherCreationForm</span><span class="p">(</span><span class="n">request</span><span class="o">.</span><span class="n">POST</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">form</span><span class="o">.</span><span class="n">is_valid</span><span class="p">():</span>
+            <span class="k">with</span> <span class="n">transaction</span><span class="o">.</span><span class="n">atomic</span><span class="p">():</span>
+                <span class="n">publisher</span> <span class="o">=</span> <span class="n">form</span><span class="o">.</span><span class="n">save</span><span class="p">()</span>
+                
+                <span class="c1"># Link the creating user as an Editor role profile</span>
+                <span class="n">request</span><span class="o">.</span><span class="n">user</span><span class="o">.</span><span class="n">role</span> <span class="o">=</span> <span class="s1">&#39;editor&#39;</span>
+                <span class="n">request</span><span class="o">.</span><span class="n">user</span><span class="o">.</span><span class="n">save</span><span class="p">()</span>
+                <span class="n">publisher</span><span class="o">.</span><span class="n">editors</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">request</span><span class="o">.</span><span class="n">user</span><span class="p">)</span>
+                
+                <span class="c1"># Unpack selected multi-choice variables out of form parameters</span>
+                <span class="n">selected_editors</span> <span class="o">=</span> <span class="n">form</span><span class="o">.</span><span class="n">cleaned_data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;editors&#39;</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">selected_editors</span><span class="p">:</span>
+                    <span class="n">publisher</span><span class="o">.</span><span class="n">editors</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="o">*</span><span class="n">selected_editors</span><span class="p">)</span>
+                    
+                <span class="n">selected_journalists</span> <span class="o">=</span> <span class="n">form</span><span class="o">.</span><span class="n">cleaned_data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;journalists&#39;</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">selected_journalists</span><span class="p">:</span>
+                    <span class="n">publisher</span><span class="o">.</span><span class="n">journalists</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="o">*</span><span class="n">selected_journalists</span><span class="p">)</span>
+                
+                <span class="n">publisher</span><span class="o">.</span><span class="n">save</span><span class="p">()</span>
+            <span class="k">return</span> <span class="n">redirect</span><span class="p">(</span><span class="s1">&#39;news_api:editorial_dashboard&#39;</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">form</span> <span class="o">=</span> <span class="n">PublisherCreationForm</span><span class="p">()</span>
+        
+    <span class="k">return</span> <span class="n">render</span><span class="p">(</span><span class="n">request</span><span class="p">,</span> <span class="s1">&#39;news_api/create_publisher.html&#39;</span><span class="p">,</span> <span class="p">{</span><span class="s1">&#39;form&#39;</span><span class="p">:</span> <span class="n">form</span><span class="p">})</span></div>
+
+</pre></div>
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="Main">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="../../index.html">News Portal</a></h1>
+
+
+
+
+
+
+
+
+
+<search id="searchbox" style="display: none" role="search">
+    <div class="searchformwrapper">
+    <form class="search" action="../../search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="Search"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</search>
+<script>document.getElementById('searchbox').style.display = "block"</script><h3>Navigation</h3>
+<p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../modules.html">news-portal-app</a></li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="../../index.html">Documentation overview</a><ul>
+  <li><a href="../index.html">Module code</a><ul>
+  </ul></li>
+  </ul></li>
+</ul>
+</div>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &#169;2026, Khensani.
+      
+      |
+      Powered by <a href="https://www.sphinx-doc.org/">Sphinx 9.1.0</a>
+      &amp; <a href="https://alabaster.readthedocs.io">Alabaster 1.0.0</a>
+      
+    </div>
+
+    
+
+    
+  </body>
+</html>
