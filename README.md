@@ -119,6 +119,43 @@ docker build -t news-app .
 docker run -p 8000:8000 --env-file .env --add-host=host.docker.internal:host-gateway news-app
 ```
 </details>
+### Track B: Isolated Containerization via Docker
+
+<details open>
+<summary>🐳 Click to expand containerized Docker setup instructions</summary>
+
+Ensure you have **Docker Desktop** and **Docker Compose** installed on your system before proceeding.
+
+#### 1. Configure the Environment
+Ensure your local `.env` file is fully configured in the root directory. To run your database inside Docker alongside the application, change your `DB_HOST` variable to match the database service name:
+```env
+DB_HOST=db
+```
+
+#### 2. Build and Launch Infrastructure
+Run the following command to build the project images and spin up the multi-container environment (Django application and PostgreSQL database) in detached background mode:
+```bash
+docker compose up --build -d
+```
+
+#### 3. Run Database Migrations
+Execute the Django schema migration routines directly inside your active application container:
+```bash
+docker compose exec web python manage.py migrate
+```
+
+#### 4. Verify System Services
+Check the live tracking status of your running container architecture:
+```bash
+docker compose ps
+```
+Once verified, access the operational application portal locally at: `http://localhost:8000/`
+
+#### 5. Useful Runtime Lifecycle Commands
+* **View application logs:** `docker compose logs -f`
+* **Stop container ecosystem:** `docker compose down`
+* **Execute test workflows:** `docker compose exec web python manage.py test`
+</details>
 
 ---
 
